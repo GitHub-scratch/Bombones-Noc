@@ -1,0 +1,41 @@
+# Node dependencies
+node_modules/
+
+# Production builds
+client/dist/
+dist/
+
+# SQLite Databases & logs
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+inventory.db
+server/inventory.db
+
+# Backups & Temp files
+backups/
+backups_manual/
+server/backups/
+tmp_inventory_block.txt
+*.log
+
+# Sensitive environment variables & API keys
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+bombones-noc-6913ab3e3360.json
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!jsconfig.json
+
+# Development tools & chat history
+.aider*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

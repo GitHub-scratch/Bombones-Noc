@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos base si el CDN falla o para complementar */
+body {
+  background-color: #FDFCFB;
+  color: #3D1F16;
+}
+
+.dark body {
+  background-color: #1a0f0d;
+  color: rgba(253, 252, 251, 0.9);
+}
+
+.btn-primary {
+  background-color: #C72C41;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-secondary {
+  background-color: #3D1F16;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dark .btn-secondary {
+  background-color: #5D3A2E;
+}
+
+.card {
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid #f3f4f6;
+}
+
+.dark .card {
+  background-color: #231512;
+  border-color: rgba(255, 255, 255, 0.05);
+}

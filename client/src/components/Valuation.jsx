@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Coins, TrendingUp, Download, PieChart, BarChart3, ArrowUpRight } from 'lucide-react';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export default function Valuation({ materials, stock, showToast }) {
   const [valuationData, setValuationData] = useState(0);

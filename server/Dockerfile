@@ -1,4 +1,4 @@
-FROM node:20-bookworm
+FROM node:20-bullseye
 
 WORKDIR /app
 
@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y \
 
 COPY package*.json ./
 
-RUN npm ci --prefer-offline
+# Compilar sqlite3 desde fuente
+RUN npm_config_build_from_source=true npm ci
 
 COPY . .
 

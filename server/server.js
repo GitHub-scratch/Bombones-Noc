@@ -39,7 +39,7 @@ const app = express();
 const PORT = 3001;
 
 const PRINTER_NAME = "\\\\PC-NOC\\ZDesigner ZD420-203dpi ZPL";
-const LABELS_PATH = "C:\\Users\\el_re\\everest-inventory\\client\\src\\Etiquetas a imprimir";
+const LABELS_PATH = path.join(__dirname, '..', 'client', 'src', 'Etiquetas a imprimir');
 
 app.use(cors());
 app.use(bodyParser.json());

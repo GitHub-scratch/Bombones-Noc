@@ -11,7 +11,7 @@ import Simulator from './components/Simulator';
 import Sidebar from './components/Sidebar';
 import Login from './components/Login';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 function Toast({ message, type, onClose }) {
   useEffect(() => {

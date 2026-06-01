@@ -6,7 +6,7 @@ import autoTable from 'jspdf-autotable';
 import logoFrunar from '../Frunar.jpeg';
 import firmaOmar from '../Firma Omar.png';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export default function History({ movements, productionHistory, fetchData, showToast }) {
   const [editingMovement, setEditingMovement] = useState(null);
@@ -22,6 +22,9 @@ export default function History({ movements, productionHistory, fetchData, showT
     zpl: '',
     loadingPreview: false
   });
+  const [printers, setPrinters] = useState([]);
+  const [selectedPrinter, setSelectedPrinter] = useState('download');
+  const [zebraStatus, setZebraStatus] = useState('checking');
 
   const generateProductionReport = (prod) => {
     try {
@@ -195,6 +198,25 @@ export default function History({ movements, productionHistory, fetchData, showT
     });
     setIsPrintModalOpen(true);
 
+    // Detectar impresoras locales a través de Zebra Browser Print
+    setZebraStatus('checking');
+    try {
+      const pRes = await axios.get('http://localhost:9100/available', { timeout: 1500 });
+      if (pRes.data && pRes.data.printers && pRes.data.printers.length > 0) {
+        setPrinters(pRes.data.printers);
+        setSelectedPrinter(JSON.stringify(pRes.data.printers[0]));
+        setZebraStatus('detected');
+      } else {
+        setPrinters([]);
+        setSelectedPrinter('download');
+        setZebraStatus('not_detected');
+      }
+    } catch (err) {
+      setPrinters([]);
+      setSelectedPrinter('download');
+      setZebraStatus('not_detected');
+    }
+
     try {
       const response = await axios.post(`${API_URL}/label-preview`, {
         pt_lote: prod.pt_lote,
@@ -209,16 +231,51 @@ export default function History({ movements, productionHistory, fetchData, showT
 
   const handleFinalPrint = async () => {
     try {
-      showToast('Enviando a Zebra...', 'info');
-      const response = await axios.post(`${API_URL}/print-labels`, {
-        pt_lote: printConfig.pt_lote,
-        pt_quantity: printConfig.quantity,
-        custom_zpl: printConfig.zpl
-      });
-      showToast(response.data.message);
-      setIsPrintModalOpen(false);
+      const qty = printConfig.quantity || 1;
+      let finalZpl = printConfig.zpl;
+      if (qty > 1) {
+        finalZpl = finalZpl.replace(/\^PQ\d+/, `^PQ${qty}`);
+      }
+
+      if (selectedPrinter === 'download') {
+        const blob = new Blob([finalZpl], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `etiqueta_${printConfig.pt_lote}.zpl`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Archivo ZPL descargado con éxito');
+        setIsPrintModalOpen(false);
+      } else if (selectedPrinter === 'copy') {
+        await navigator.clipboard.writeText(finalZpl);
+        showToast('Código ZPL copiado al portapapeles');
+        setIsPrintModalOpen(false);
+      } else if (selectedPrinter === 'local-server') {
+        showToast('Enviando a la impresora local del servidor...', 'info');
+        const response = await axios.post(`${API_URL}/print-labels`, {
+          pt_lote: printConfig.pt_lote,
+          pt_quantity: printConfig.quantity,
+          custom_zpl: printConfig.zpl
+        });
+        showToast(response.data.message);
+        setIsPrintModalOpen(false);
+      } else {
+        // Enviar a impresora Zebra física detectada localmente
+        const printerObj = JSON.parse(selectedPrinter);
+        showToast(`Imprimiendo ${qty} etiquetas en ${printerObj.name}...`, 'info');
+        await axios.post('http://localhost:9100/write', {
+          device: printerObj,
+          data: finalZpl
+        });
+        showToast('Impresión enviada con éxito');
+        setIsPrintModalOpen(false);
+      }
     } catch (err) {
-      showToast(err.response?.data?.error || 'Error de impresión', 'error');
+      console.error(err);
+      showToast('Error al imprimir: ' + (err.response?.data?.error || err.message || err), 'error');
     }
   };
 
@@ -285,6 +342,31 @@ export default function History({ movements, productionHistory, fetchData, showT
                     <span className="inline-block px-2 py-0.5 bg-chocolate/10 dark:bg-white/10 rounded-md text-[8px] font-black text-chocolate dark:text-cream/60 uppercase">Lote: {printConfig.pt_lote}</span>
                   </div>
                   <div className="space-y-2">
+                    <label className="text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest block ml-2">Destino de Impresión</label>
+                    <select 
+                      value={selectedPrinter} 
+                      onChange={e => setSelectedPrinter(e.target.value)}
+                      className="w-full p-3 bg-slate-50 dark:bg-black/20 border border-slate-100 dark:border-white/10 rounded-xl font-black text-chocolate dark:text-cream text-xs uppercase tracking-wide focus:outline-none focus:ring-2 ring-chocolate/10 transition-all"
+                    >
+                      {zebraStatus === 'checking' && (
+                        <option disabled>Buscando impresoras locales...</option>
+                      )}
+                      {zebraStatus === 'detected' && printers.map((pr, idx) => (
+                        <option key={idx} value={JSON.stringify(pr)}>
+                          🖨️ {pr.name} ({pr.connection})
+                        </option>
+                      ))}
+                      <option value="download">💾 Descargar archivo .ZPL</option>
+                      <option value="copy">📋 Copiar código ZPL al portapapeles</option>
+                      <option value="local-server">💻 Impresora local del Servidor (Zebra PC-NOC)</option>
+                    </select>
+                    {zebraStatus === 'not_detected' && (
+                      <p className="text-[8px] font-black text-slate-400 dark:text-white/30 uppercase tracking-widest leading-normal mt-1.5 px-1 text-center">
+                        ⚠️ No se detectó "Zebra Browser Print" en tu PC. Se seleccionó la descarga por defecto.
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
                     <label className="text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest block text-center">Cantidad</label>
                     <div className="flex items-center justify-center gap-3">
                       <button onClick={() => setPrintConfig(p => ({ ...p, quantity: Math.max(1, p.quantity - 1) }))} className="w-10 h-10 bg-slate-100 dark:bg-white/10 rounded-xl flex items-center justify-center text-xl font-black text-chocolate dark:text-cream shadow-sm">-</button>
@@ -293,8 +375,8 @@ export default function History({ movements, productionHistory, fetchData, showT
                     </div>
                   </div>
                 </div>
-                <button onClick={handleFinalPrint} disabled={!printConfig.zpl || printConfig.loadingPreview} className="w-full bg-chocolate dark:bg-chocolate-light text-white py-4 rounded-xl font-black text-base shadow-lg flex items-center justify-center gap-2 hover:bg-chocolate/90 active:scale-95 transition-all disabled:opacity-30">
-                  <Printer size={20} /> IMPRIMIR
+                <button onClick={handleFinalPrint} disabled={!printConfig.zpl || printConfig.loadingPreview} className="w-full bg-chocolate dark:bg-[#723a2a] text-white py-4 rounded-xl font-black text-base shadow-lg flex items-center justify-center gap-2 hover:bg-chocolate/90 active:scale-95 transition-all disabled:opacity-30">
+                  <Printer size={20} /> EJECUTAR ACCIÓN
                 </button>
               </div>
             </div>

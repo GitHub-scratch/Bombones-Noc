@@ -12,7 +12,7 @@ export default function Sidebar({ activeTab, setActiveTab, lowStockCount, curren
 
   const checkServer = async () => {
     try {
-      const res = await axios.get('http://localhost:3001/api/materials', { timeout: 3000 });
+            const res = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3001/api'}/materials`, { timeout: 3000 });
       setServerStatus(res.status === 200 ? 'online' : 'offline');
     } catch { setServerStatus('offline'); }
   };

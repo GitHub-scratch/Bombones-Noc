@@ -581,7 +581,7 @@ export default function Production({ materials, stock, productionHistory, active
                             <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Material</label>
                             <select value={ing.material_id} onChange={e => updateIngredient(ing.id, 'material_id', e.target.value)} className="w-full p-3 bg-white rounded-xl border-none font-bold text-chocolate text-xs shadow-sm" required>
                               <option value="">Elegir chocolate...</option>
-                              {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                              {materials.filter(m => m.category && m.category.toLowerCase() === 'chocolate').map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
                           </div>
                           <div className="space-y-1">

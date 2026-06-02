@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-
 /* Estilos base si el CDN falla o para complementar */
 body {
   background-color: #FDFCFB;
@@ -49,4 +48,27 @@ body {
 .dark .card {
   background-color: #231512;
   border-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ========================================
+   RESPONSIVE MOVIL
+   ======================================== */
+
+@media (max-width: 768px) {
+  .card {
+    padding: 1rem;
+    border-radius: 1rem;
+  }
+
+  table td,
+  table th {
+    font-size: 0.78rem;
+    padding: 0.35rem 0.5rem;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
 }

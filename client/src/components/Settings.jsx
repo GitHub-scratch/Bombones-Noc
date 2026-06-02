@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-  PlusCircle, Trash2, Settings as SettingsIcon, Edit3, Save, X, 
-  Users, Shield,
+PlusCircle, Trash2, Settings as SettingsIcon, Edit3, Save, X,
   Check, AlertCircle, Lock, UserPlus, Key
 } from 'lucide-react';
 
@@ -68,17 +67,6 @@ export default function Settings({ materials, fetchData, showToast, user, token:
     }
   };
 
-  const fetchBackups = async () => {
-    setLoadingBackups(true);
-    try {
-      const { data } = await axios.get(`${API_URL}/backup/list`, authHeaders());
-      await axios.delete(`${API_URL}/materials/${id}`, authHeaders());
-      showToast('Material eliminado');
-      fetchData();
-    } catch (err) {
-      showToast('Error al eliminar material', 'error');
-    }
-  };
 
   useEffect(() => {
     if (activeTab === 'usuarios') fetchUsers();

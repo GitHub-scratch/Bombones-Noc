@@ -18,3 +18,7 @@ If you are developing a production application, we recommend using TypeScript wi
 
 ## Backend
 API: https://bombones-noc-production.up.railway.app
+
+
+## Backend API
+API URL: https://bombones-noc-production.up.railway.app/api

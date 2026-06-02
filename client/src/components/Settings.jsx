@@ -114,6 +114,16 @@ export default function Settings({ materials, fetchData, showToast, user, token:
     }
   };
 
+      const deleteMaterial = async (id) => {
+    if (!window.confirm('¿Eliminar este material? Esto podría afectar registros históricos.')) return;
+    try {
+      await axios.delete(`${API_URL}/materials/${id}`, authHeaders());
+      showToast('Material eliminado');
+      fetchData();
+    } catch (err) {
+      showToast('Error al eliminar material', 'error');
+    }
+  };
   const handleAddMaterial = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);

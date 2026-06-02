@@ -40,6 +40,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [permisos, setPermisos] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('noc_token');
@@ -71,15 +72,13 @@ export default function App() {
         axios.get(`${API_URL}/movements`),
         axios.get(`${API_URL}/production/sessions`),
       ]);
-
       const mats = matsRes.status === 'fulfilled' ? matsRes.value.data : [];
-      const stk  = stockRes.status === 'fulfilled' ? stockRes.value.data : [];
-      const pts  = ptStockRes.status === 'fulfilled' ? ptStockRes.value.data : [];
-      const ptb  = ptBatchesRes.status === 'fulfilled' ? ptBatchesRes.value.data : [];
+      const stk = stockRes.status === 'fulfilled' ? stockRes.value.data : [];
+      const pts = ptStockRes.status === 'fulfilled' ? ptStockRes.value.data : [];
+      const ptb = ptBatchesRes.status === 'fulfilled' ? ptBatchesRes.value.data : [];
       const hist = histRes.status === 'fulfilled' ? histRes.value.data : [];
       const movs = movsRes.status === 'fulfilled' ? movsRes.value.data : [];
       const sess = sessRes.status === 'fulfilled' ? sessRes.value.data : [];
-
       setMaterials(mats);
       setStock(stk);
       setPtStock(pts);
@@ -87,7 +86,6 @@ export default function App() {
       setProductionHistory(hist);
       setMovements(movs);
       setActiveSessions(sess);
-
       const low = mats.filter(m => {
         const total = stk
           .filter(s => s.material_id === m.id)
@@ -130,71 +128,104 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-cream font-sans text-chocolate selection:bg-raspberry selection:text-white">
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        lowStockCount={lowStockCount}
-        currentUser={user}
-        onLogout={handleLogout}
-        permisos={permisos}
-      />
 
-      <main className="flex-1 overflow-y-auto px-8 md:px-12 py-12 bg-cream/50">
-        <div className="max-w-7xl mx-auto pb-12">
-          {activeTab === 'dashboard' && (
-            <Dashboard
-              materials={materials}
-              stock={stock}
-              ptStock={ptStock}
-              ptBatches={ptBatches}
-              productionHistory={productionHistory}
-              fetchData={fetchData}
-              showToast={showToast}
-            />
-          )}
-          {activeTab === 'inventory' && (
-            <Inventory 
-              materials={materials} 
-              stock={stock} 
-              ptStock={ptStock}
-              productionHistory={productionHistory}
-              movements={movements} 
-              fetchData={fetchData} 
-              showToast={showToast} 
-              userPermisos={permisos} 
-            />
-          )}
-          {activeTab === 'production' && (
-            <Production materials={materials} stock={stock} productionHistory={productionHistory} activeSessions={activeSessions} fetchData={fetchData} showToast={showToast} /> 
-          )}
-          {activeTab === 'guarda' && (
-            <Guarda fetchData={fetchData} showToast={showToast} />
-          )}
-          {activeTab === 'history' && (
-            <History 
-              movements={movements} 
-              productionHistory={productionHistory} 
-              fetchData={fetchData} 
-              showToast={showToast} 
-            />
-          )}
-          {activeTab === 'valuation' && (
-            <Valuation materials={materials} stock={stock} showToast={showToast} />
-          )}
-          {activeTab === 'simulator' && (
-            <Simulator materials={materials} stock={stock} showToast={showToast} />
-          )}
-          {activeTab === 'settings' && (
-            <Settings
-              materials={materials}
-              fetchData={fetchData}
-              showToast={showToast}
-              user={user}
-              token={token}
-            />
-          )}
+      {/* Overlay oscuro cuando el menu esta abierto en movil */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar: en movil se muestra como drawer deslizable */}
+      <div className={`fixed md:relative z-50 h-full transition-transform duration-300 ease-in-out ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      } md:translate-x-0`}>
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={(tab) => { setActiveTab(tab); setSidebarOpen(false); }}
+          lowStockCount={lowStockCount}
+          currentUser={user}
+          onLogout={handleLogout}
+          permisos={permisos}
+        />
+      </div>
+
+      {/* Contenido principal */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+
+        {/* Barra superior solo visible en movil */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-chocolate text-white shrink-0 shadow-lg">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+            aria-label="Abrir menu"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <span className="font-bold text-base tracking-widest uppercase">Bombones NOC</span>
         </div>
-      </main>
+
+        {/* Area de contenido con scroll */}
+        <main className="flex-1 overflow-y-auto px-4 md:px-8 xl:px-12 py-6 md:py-12 bg-cream/50">
+          <div className="max-w-7xl mx-auto pb-12">
+            {activeTab === 'dashboard' && (
+              <Dashboard
+                materials={materials}
+                stock={stock}
+                ptStock={ptStock}
+                ptBatches={ptBatches}
+                productionHistory={productionHistory}
+                fetchData={fetchData}
+                showToast={showToast}
+              />
+            )}
+            {activeTab === 'inventory' && (
+              <Inventory
+                materials={materials}
+                stock={stock}
+                ptStock={ptStock}
+                productionHistory={productionHistory}
+                movements={movements}
+                fetchData={fetchData}
+                showToast={showToast}
+                userPermisos={permisos}
+              />
+            )}
+            {activeTab === 'production' && (
+              <Production materials={materials} stock={stock} productionHistory={productionHistory} activeSessions={activeSessions} fetchData={fetchData} showToast={showToast} />
+            )}
+            {activeTab === 'guarda' && (
+              <Guarda fetchData={fetchData} showToast={showToast} />
+            )}
+            {activeTab === 'history' && (
+              <History
+                movements={movements}
+                productionHistory={productionHistory}
+                fetchData={fetchData}
+                showToast={showToast}
+              />
+            )}
+            {activeTab === 'valuation' && (
+              <Valuation materials={materials} stock={stock} showToast={showToast} />
+            )}
+            {activeTab === 'simulator' && (
+              <Simulator materials={materials} stock={stock} showToast={showToast} />
+            )}
+            {activeTab === 'settings' && (
+              <Settings
+                materials={materials}
+                fetchData={fetchData}
+                showToast={showToast}
+                user={user}
+                token={token}
+              />
+            )}
+          </div>
+        </main>
+      </div>
 
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
     </div>

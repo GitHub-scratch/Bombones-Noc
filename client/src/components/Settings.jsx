@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   PlusCircle, Trash2, Settings as SettingsIcon, Edit3, Save, X, 
-  HardDrive, RefreshCw, Download, Clock, Users, Shield, ShieldAlert,
+  Users, Shield,
   Check, AlertCircle, Lock, UserPlus, Key
 } from 'lucide-react';
 
@@ -34,7 +34,6 @@ export default function Settings({ materials, fetchData, showToast, user, token:
         guarda: form.p_guarda.checked,
         history: form.p_history.checked,
         settings: form.p_settings.checked,
-        respaldo: form.p_respaldo.checked
       }
     };
     if (form.password.value) userData.password = form.password.value;
@@ -50,9 +49,6 @@ export default function Settings({ materials, fetchData, showToast, user, token:
   };
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showUserForm, setShowUserForm] = useState(false);
-  const [backups, setBackups] = useState([]);
-  const [loadingBackups, setLoadingBackups] = useState(false);
-  const [creando, setCreando] = useState(false);
 
   const getToken = () => tokenProp || user?.token || localStorage.getItem('noc_token');
   const authHeaders = () => {
@@ -76,49 +72,6 @@ export default function Settings({ materials, fetchData, showToast, user, token:
     setLoadingBackups(true);
     try {
       const { data } = await axios.get(`${API_URL}/backup/list`, authHeaders());
-      setBackups(data || []);
-    } catch (err) {
-      showToast('Error al cargar respaldos', 'error');
-    } finally {
-      setLoadingBackups(false);
-    }
-  };
-
-  const handleBackup = async () => {
-    setCreando(true);
-    try {
-      await axios.post(`${API_URL}/backup`, {}, authHeaders());
-      showToast('Respaldo creado con éxito');
-      fetchBackups();
-    } catch (err) {
-      showToast('Error al crear respaldo', 'error');
-    } finally {
-      setCreando(false);
-    }
-  };
-
-  const handleDownload = async (name) => {
-    try {
-      const t = getToken();
-      const response = await axios.get(`${API_URL}/backup/download/${name}`, {
-        ...authHeaders(),
-        responseType: 'blob'
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', name);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      showToast('Error al descargar respaldo', 'error');
-    }
-  };
-
-  const deleteMaterial = async (id) => {
-    if (!window.confirm('¿Eliminar este material? Esto podría afectar registros históricos.')) return;
-    try {
       await axios.delete(`${API_URL}/materials/${id}`, authHeaders());
       showToast('Material eliminado');
       fetchData();
@@ -129,8 +82,7 @@ export default function Settings({ materials, fetchData, showToast, user, token:
 
   useEffect(() => {
     if (activeTab === 'usuarios') fetchUsers();
-    if (activeTab === 'respaldo') fetchBackups();
-  }, [activeTab]);
+     [activeTab]);
 
   const handleAddUser = async (e) => {
     e.preventDefault();
@@ -148,7 +100,6 @@ export default function Settings({ materials, fetchData, showToast, user, token:
         guarda: form.p_guarda.checked,
         history: form.p_history.checked,
         settings: form.p_settings.checked,
-        respaldo: form.p_respaldo.checked
       }
     };
 
@@ -212,8 +163,7 @@ export default function Settings({ materials, fetchData, showToast, user, token:
   const tabs = [
     { id: 'materiales', label: 'Insumos',  icon: SettingsIcon },
     { id: 'usuarios',   label: 'Usuarios', icon: Users },
-    { id: 'respaldo',   label: 'Seguridad', icon: HardDrive },
-  ];
+      ];
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -410,8 +360,7 @@ export default function Settings({ materials, fetchData, showToast, user, token:
                         { id: 'guarda', label: 'Guarda' },
                         { id: 'history', label: 'Historial' },
                         { id: 'settings', label: 'Config' },
-                        { id: 'respaldo', label: 'Seguridad' }
-                      ].map(p => (
+                                              ].map(p => (
                         <label key={p.id} className="flex items-center gap-2 cursor-pointer group">
                           <input type="checkbox" name={`p_${p.id}`} defaultChecked className="w-4 h-4 rounded border-slate-200 dark:border-white/10 text-raspberry focus:ring-raspberry transition-all" />
                           <span className="text-[9px] font-black text-chocolate/50 dark:text-white/40 group-hover:text-chocolate dark:group-hover:text-cream uppercase tracking-widest transition-colors">{p.label}</span>
@@ -521,8 +470,7 @@ export default function Settings({ materials, fetchData, showToast, user, token:
                         { id: 'guarda', label: 'Guarda' },
                         { id: 'history', label: 'Historial' },
                         { id: 'settings', label: 'Config' },
-                        { id: 'respaldo', label: 'Seguridad' }
-                      ].map(p => (
+                                              ].map(p => (
                         <label key={p.id} className="flex items-center gap-2 cursor-pointer group">
                           <input 
                             type="checkbox" 
@@ -550,43 +498,6 @@ export default function Settings({ materials, fetchData, showToast, user, token:
         </div>
       )}
 
-      {/* CONTENT: RESPALDO */}
-      {activeTab === 'respaldo' && (
-        <div className="space-y-6 animate-in slide-in-from-bottom-6">
-          <header className="flex justify-between items-center px-2">
-            <h3 className="text-lg font-black text-chocolate dark:text-cream uppercase tracking-tight flex items-center gap-3">
-               <div className="p-2 bg-raspberry text-white rounded-xl shadow-lg shadow-raspberry/20"><ShieldAlert size={16}/></div>
-               Seguridad de Datos
-            </h3>
-            <button onClick={handleBackup} disabled={creando} className="bg-chocolate dark:bg-chocolate-light text-white px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg hover:scale-105 disabled:opacity-50 transition-all flex items-center gap-2">
-               <Save size={16} /> {creando ? 'Protegiendo...' : 'Crear Respaldo'}
-            </button>
-          </header>
-
-          <div className="bg-white dark:bg-[#231512] rounded-[2rem] shadow-xl border border-chocolate/5 dark:border-white/5 overflow-hidden transition-colors duration-500">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/50 dark:bg-white/5">
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest">Archivo</th>
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest">Fecha</th>
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest text-right">Tamaño</th>
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest text-center">Gestión</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 dark:divide-white/5">
-                {backups.map((b, i) => (
-                  <tr key={b.name} className={cn("hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group", i === 0 && "bg-chocolate/[0.01] dark:bg-white/[0.01]")}>
-                    <td className="p-4 font-mono text-[10px] font-black text-chocolate dark:text-cream/80">{b.name} {i === 0 && <span className="ml-2 px-1.5 py-0.5 bg-chocolate dark:bg-chocolate-light text-white text-[7px] rounded uppercase">Reciente</span>}</td>
-                    <td className="p-4 text-[10px] font-bold text-slate-400 dark:text-white/30 uppercase">{new Date(b.createdTime).toLocaleString()}</td>
-                    <td className="p-4 text-right font-black text-slate-500 dark:text-white/40 text-[10px]">{(b.size / 1024).toFixed(1)} KB</td>
-                    <td className="p-4 text-center"><button onClick={() => handleDownload(b.name)} className="p-2 bg-chocolate/5 dark:bg-white/5 text-chocolate dark:text-cream/60 rounded-lg hover:bg-chocolate dark:hover:bg-chocolate-light hover:text-white transition-all"><Download size={16}/></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
+      div>
   );
 }

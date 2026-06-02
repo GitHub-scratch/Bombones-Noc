@@ -326,7 +326,7 @@ export default function Dashboard({ materials = [], stock = [], ptStock = [], pt
                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumen últimas jornadas</p>
             </div>
             <div className="flex-1 overflow-auto">
-              <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto w-full"><table className="w-full text-left border-collapse min-w-[350px]">
                 <tbody className="divide-y divide-slate-50">
                   {efficiencyDisplayList.map((eff) => (
                     <tr key={eff.dateKey} className="hover:bg-slate-50/50 transition-colors">
@@ -351,7 +351,7 @@ export default function Dashboard({ materials = [], stock = [], ptStock = [], pt
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </div>
         </div>

@@ -8,191 +8,43 @@ const { exec } = require('child_process');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-
 const JWT_SECRET = process.env.JWT_SECRET || 'bombones_noc_secret_2026';
 const PORT = process.env.PORT || 3001;
-const PRINTER_NAME = "\\\\PC-NOC\\ZDesigner ZD420-203dpi ZPL";
-const LABELS_PATH = path.join(__dirname, '..', 'client', 'src', 'Etiquetas a imprimir');
-
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 pool.connect(err => { if (err) console.error('Error PostgreSQL:', err.message); else console.log('Conectado a Supabase PostgreSQL'); });
-
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
-
-const authMiddleware = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No autorizado' });
-  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
-  catch { res.status(401).json({ error: 'Token invalido o expirado' }); }
-};
-
-const logAudit = async (uid, uname, accion, detalle) => {
-  try { await pool.query('INSERT INTO audit_log (usuario_id,username,accion,detalle) VALUES ($1,$2,$3,$4)', [uid, uname, accion, detalle]); } catch {}
-};
-
-// ── Impresion ──
-app.post('/api/label-preview', (req, res) => {
-  const { pt_lote, date, exp_date } = req.body;
-  if (!pt_lote) return res.status(400).json({ error: 'Lote no proporcionado' });
-  let fileName = pt_lote.startsWith('FBD') ? 'ETIQUETA_L.zpl' : pt_lote.startsWith('FBA') ? 'ETIQUETA_A.zpl' : pt_lote.startsWith('FRB') ? 'ETIQUETA_R.zpl' : null;
-  if (!fileName) return res.status(400).json({ error: 'Prefijo no reconocido' });
-  const filePath = path.join(LABELS_PATH, fileName);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Archivo .zpl no encontrado' });
-  try {
-    let zpl = fs.readFileSync(filePath).toString('utf8');
-    const fx = zpl.indexOf('^XA'); if (fx !== -1) zpl = zpl.substring(fx);
-    const prodDateStr = (date || new Date().toISOString()).split('T')[0];
-    const expDateStr = exp_date ? exp_date.split('T')[0] : (() => { const p = prodDateStr.split('-'); return `${parseInt(p[0])+1}-${p[1]}-${p[2]}`; })();
-    const fp = `${prodDateStr.slice(5,7)}/${prodDateStr.slice(2,4)}`;
-    const fv = `${expDateStr.slice(5,7)}/${expDateStr.slice(2,4)}`;
-    zpl = zpl.replace(/FDF\.P \d{2}\/\d{2}/g, `FDF.P ${fp}`).replace(/FDF\.V \d{2}\/\d{2}/g, `FDF.V ${fv}`).replace(/FDLOTE: [A-Z0-9]+/g, `FDLOTE: ${pt_lote}`);
-    res.json({ zpl: zpl.trim() });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/print-labels', (req, res) => {
-  const { pt_lote, pt_quantity, custom_zpl } = req.body;
-  if (!pt_lote && !custom_zpl) return res.status(400).json({ error: 'Datos insuficientes' });
-  try {
-    let zplContent = custom_zpl || fs.readFileSync(path.join(LABELS_PATH, pt_lote.startsWith('FBD') ? 'ETIQUETA_L.prn' : pt_lote.startsWith('FBA') ? 'ETIQUETA_A.prn' : 'ETIQUETA_R.prn'), 'utf8');
-    const qty = Math.ceil(parseFloat(pt_quantity) || 1);
-    zplContent = zplContent.replace(/\^PQ\d+/, `^PQ${qty}`);
-    const tmp = path.join(__dirname, 'temp_label.zpl');
-    fs.writeFileSync(tmp, zplContent);
-    exec(`copy /b "${tmp}" "${PRINTER_NAME}"`, err => {
-      if (err) return res.status(500).json({ error: 'Error impresora: ' + err.message });
-      res.json({ success: true });
-      setTimeout(() => { try { fs.unlinkSync(tmp); } catch {} }, 5000);
-    });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ── Auth ──
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    const r = await pool.query("SELECT * FROM usuarios WHERE username=$1 AND activo=1", [username]);
-    const user = r.rows[0];
-    if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ error: 'Usuario o contrasena incorrectos' });
-    const token = jwt.sign({ id: user.id, username: user.username, rol: user.rol, nombre: user.nombre, permisos: JSON.parse(user.permisos||'{}') }, JWT_SECRET, { expiresIn: '12h' });
-    await logAudit(user.id, user.username, 'LOGIN', 'Inicio de sesion');
-    res.json({ token, user: { id: user.id, username: user.username, nombre: user.nombre, rol: user.rol, permisos: JSON.parse(user.permisos||'{}') } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/auth/logout', authMiddleware, async (req, res) => {
-  await logAudit(req.user.id, req.user.username, 'LOGOUT', 'Cierre de sesion');
-  res.json({ success: true });
-});
-
-// ── Materiales ──
-app.get('/api/materials', async (req, res) => {
-  try { res.json((await pool.query('SELECT * FROM materials ORDER BY name')).rows); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/materials', async (req, res) => {
-  try {
-    const { name, unit, min_stock, category, base_cost } = req.body;
-    const r = await pool.query('INSERT INTO materials (name,unit,min_stock,category,base_cost) VALUES ($1,$2,$3,$4,$5) RETURNING id', [name, unit, min_stock||0, category||'OTRO', parseFloat(base_cost)||0]);
-    res.json({ id: r.rows[0].id, name, unit, min_stock, category, base_cost: parseFloat(base_cost)||0 });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.put('/api/materials/:id', async (req, res) => {
-  try {
-    const { name, unit, min_stock, category, base_cost } = req.body;
-    if (!name || !unit) return res.status(400).json({ error: 'Nombre y Unidad son requeridos' });
-    const r = await pool.query('UPDATE materials SET name=$1,unit=$2,min_stock=$3,category=$4,base_cost=$5 WHERE id=$6', [name, unit, parseFloat(min_stock)||0, category||'OTRO', parseFloat(base_cost)||0, req.params.id]);
-    if (r.rowCount===0) return res.status(404).json({ error: 'Material no encontrado' });
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/materials/:id', async (req, res) => {
-  try { await pool.query('DELETE FROM materials WHERE id=$1',[req.params.id]); res.json({ success: true }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Stock ──
-app.get('/api/stock', async (req, res) => {
-  try {
-    const r = await pool.query('SELECT m.id as material_id,m.name,m.unit,m.category,m.min_stock,b.id as batch_id,b.lote,b.quantity,b.expiry_date,b.cost_per_unit FROM materials m LEFT JOIN batches b ON m.id=b.material_id AND b.quantity>0 ORDER BY m.name,b.expiry_date');
-    res.json(r.rows);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Inventario ──
-app.post('/api/inventory/in', async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { material_id, lote, quantity, expiry_date, description, cost_per_unit } = req.body;
-    const b = await client.query('INSERT INTO batches (material_id,lote,quantity,expiry_date,cost_per_unit) VALUES ($1,$2,$3,$4,$5) RETURNING id',[material_id,lote,quantity,expiry_date,parseFloat(cost_per_unit)||0]);
-    await client.query('INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES ($1,$2,$3,$4,$5,$6)',[material_id,b.rows[0].id,lote,'IN',quantity,description||'Ingreso manual']);
-    await client.query('COMMIT');
-    res.json({ success: true, batch_id: b.rows[0].id });
-  } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
-  finally { client.release(); }
-});
-
-app.post('/api/inventory/out', async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { batch_id, quantity, description } = req.body;
-    const b = (await client.query('SELECT * FROM batches WHERE id=$1',[batch_id])).rows[0];
-    if (!b) return res.status(404).json({ error: 'Lote no encontrado' });
-    if (b.quantity < quantity) return res.status(400).json({ error: 'Stock insuficiente' });
-    await client.query('UPDATE batches SET quantity=$1 WHERE id=$2',[b.quantity-quantity,batch_id]);
-    await client.query('INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES ($1,$2,$3,$4,$5,$6)',[b.material_id,batch_id,b.lote,'OUT',quantity,description]);
-    await client.query('COMMIT');
-    res.json({ success: true });
-  } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
-  finally { client.release(); }
-});
-
-// ── Valorizacion ──
-app.get('/api/business/valuation', async (req, res) => {
-  try {
-    const r = await pool.query('SELECT SUM(CASE WHEN quantity>0 THEN quantity*cost_per_unit ELSE 0 END) as total_valuation FROM batches');
-    res.json({ total_valuation: r.rows[0].total_valuation||0 });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── Movimientos ──
-app.get('/api/movements', async (req, res) => {
-  try {
-    res.json((await pool.query('SELECT mov.*,mat.name as material_name,mat.unit FROM movements mov JOIN materials mat ON mov.material_id=mat.id ORDER BY mov.date DESC LIMIT 100')).rows);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.put('/api/movements/:id', async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { quantity, lote, description, date, cost_per_unit } = req.body;
-    const mov = (await client.query('SELECT * FROM movements WHERE id=$1',[req.params.id])).rows[0];
-    if (!mov) return res.status(404).json({ error: 'Movimiento no encontrado' });
-    const batch = (await client.query('SELECT * FROM batches WHERE id=$1',[mov.batch_id])).rows[0];
-    if (!batch) return res.status(404).json({ error: 'Lote no encontrado' });
-    const diff = quantity - mov.quantity;
-    const newQty = mov.type==='IN' ? batch.quantity+diff : batch.quantity-diff;
-    if (newQty < 0) return res.status(400).json({ error: 'Stock negativo resultante' });
-    await client.query('UPDATE batches SET quantity=$1,lote=$2,cost_per_unit=$3 WHERE id=$4',[newQty,lote,cost_per_unit!==undefined?parseFloat(cost_per_unit):batch.cost_per_unit,mov.batch_id]);
-    await client.query('UPDATE movements SET quantity=$1,lote=$2,description=$3,date=$4 WHERE id=$5',[quantity,lote,description,date||mov.date,req.params.id]);
-    await client.query('COMMIT');
-    res.json({ success: true });
-  } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
-  finally { client.release(); }
-});
-
-app.delete('/api/movements/:id', async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const mov = (await client.query('SELECT * FROM movements WHERE id=$1',[req.params.id])).rows[0];
-    if (!mov) return res.status(404).json({ error: 'Movimiento no encontrado' });
-    if (mov.type==='PROD') return res.status(400).json({ error: 'No se puede borrar un registro de produccion desde el historial general
+const authMiddleware = (req, res, next) => { const token = req.headers['authorization']?.split(' ')[1]; if (!token) return res.status(401).json({ error: 'No autorizado' }); try { req.user = jwt.verify(token, JWT_SECRET); next(); } catch { res.status(401).json({ error: 'Token invalido' }); } };
+const logAudit = async (uid, uname, accion, detalle) => { try { await pool.query('INSERT INTO audit_log (usuario_id,username,accion,detalle) VALUES (\,\,\,\)', [uid,uname,accion,detalle]); } catch {} };
+app.post('/api/auth/login', async (req, res) => { try { const { username, password } = req.body; const r = await pool.query('SELECT * FROM usuarios WHERE username=\ AND activo=1', [username]); const user = r.rows[0]; if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ error: 'Usuario o contrasena incorrectos' }); const token = jwt.sign({ id: user.id, username: user.username, rol: user.rol, nombre: user.nombre, permisos: JSON.parse(user.permisos||'{}') }, JWT_SECRET, { expiresIn: '12h' }); await logAudit(user.id, user.username, 'LOGIN', 'Inicio de sesion'); res.json({ token, user: { id: user.id, username: user.username, nombre: user.nombre, rol: user.rol, permisos: JSON.parse(user.permisos||'{}') } }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.post('/api/auth/logout', authMiddleware, async (req, res) => { await logAudit(req.user.id, req.user.username, 'LOGOUT', 'Cierre de sesion'); res.json({ success: true }); });
+app.get('/api/materials', async (req, res) => { try { res.json((await pool.query('SELECT * FROM materials ORDER BY name')).rows); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.post('/api/materials', async (req, res) => { try { const { name, unit, min_stock, category, base_cost } = req.body; const r = await pool.query('INSERT INTO materials (name,unit,min_stock,category,base_cost) VALUES (\,\,\,\,\) RETURNING id', [name,unit,min_stock||0,category||'OTRO',parseFloat(base_cost)||0]); res.json({ id: r.rows[0].id, name, unit, min_stock, category, base_cost: parseFloat(base_cost)||0 }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.put('/api/materials/:id', async (req, res) => { try { const { name, unit, min_stock, category, base_cost } = req.body; if (!name||!unit) return res.status(400).json({ error: 'Nombre y Unidad requeridos' }); const r = await pool.query('UPDATE materials SET name=\,unit=\,min_stock=\,category=\,base_cost=\ WHERE id=\', [name,unit,parseFloat(min_stock)||0,category||'OTRO',parseFloat(base_cost)||0,req.params.id]); if (r.rowCount===0) return res.status(404).json({ error: 'Material no encontrado' }); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.delete('/api/materials/:id', async (req, res) => { try { await pool.query('DELETE FROM materials WHERE id=\',[req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.get('/api/stock', async (req, res) => { try { res.json((await pool.query('SELECT m.id as material_id,m.name,m.unit,m.category,m.min_stock,b.id as batch_id,b.lote,b.quantity,b.expiry_date,b.cost_per_unit FROM materials m LEFT JOIN batches b ON m.id=b.material_id AND b.quantity>0 ORDER BY m.name,b.expiry_date')).rows); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.post('/api/inventory/in', async (req, res) => { const client = await pool.connect(); try { await client.query('BEGIN'); const { material_id, lote, quantity, expiry_date, description, cost_per_unit } = req.body; const b = await client.query('INSERT INTO batches (material_id,lote,quantity,expiry_date,cost_per_unit) VALUES (\,\,\,\,\) RETURNING id',[material_id,lote,quantity,expiry_date,parseFloat(cost_per_unit)||0]); await client.query('INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES (\,\,\,\,\,\)',[material_id,b.rows[0].id,lote,'IN',quantity,description||'Ingreso manual']); await client.query('COMMIT'); res.json({ success: true, batch_id: b.rows[0].id }); } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); } finally { client.release(); } });
+app.post('/api/inventory/out', async (req, res) => { const client = await pool.connect(); try { await client.query('BEGIN'); const { batch_id, quantity, description } = req.body; const b = (await client.query('SELECT * FROM batches WHERE id=\',[batch_id])).rows[0]; if (!b) return res.status(404).json({ error: 'Lote no encontrado' }); if (b.quantity < quantity) return res.status(400).json({ error: 'Stock insuficiente' }); await client.query('UPDATE batches SET quantity=\ WHERE id=\',[b.quantity-quantity,batch_id]); await client.query('INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES (\,\,\,\,\,\)',[b.material_id,batch_id,b.lote,'OUT',quantity,description]); await client.query('COMMIT'); res.json({ success: true }); } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); } finally { client.release(); } });
+app.get('/api/business/valuation', async (req, res) => { try { res.json({ total_valuation: (await pool.query('SELECT SUM(CASE WHEN quantity>0 THEN quantity*cost_per_unit ELSE 0 END) as tv FROM batches')).rows[0].tv||0 }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.get('/api/movements', async (req, res) => { try { res.json((await pool.query('SELECT mov.*,mat.name as material_name,mat.unit FROM movements mov JOIN materials mat ON mov.material_id=mat.id ORDER BY mov.date DESC LIMIT 100')).rows); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.put('/api/movements/:id', async (req, res) => { const client = await pool.connect(); try { await client.query('BEGIN'); const { quantity, lote, description, date, cost_per_unit } = req.body; const mov = (await client.query('SELECT * FROM movements WHERE id=\',[req.params.id])).rows[0]; if (!mov) return res.status(404).json({ error: 'Movimiento no encontrado' }); const batch = (await client.query('SELECT * FROM batches WHERE id=\',[mov.batch_id])).rows[0]; if (!batch) return res.status(404).json({ error: 'Lote no encontrado' }); const newQty = mov.type==='IN' ? batch.quantity+(quantity-mov.quantity) : batch.quantity-(quantity-mov.quantity); if (newQty < 0) return res.status(400).json({ error: 'Stock negativo' }); await client.query('UPDATE batches SET quantity=\,lote=\,cost_per_unit=\ WHERE id=\',[newQty,lote,cost_per_unit!==undefined?parseFloat(cost_per_unit):batch.cost_per_unit,mov.batch_id]); await client.query('UPDATE movements SET quantity=\,lote=\,description=\,date=\ WHERE id=\',[quantity,lote,description,date||mov.date,req.params.id]); await client.query('COMMIT'); res.json({ success: true }); } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); } finally { client.release(); } });
+app.delete('/api/movements/:id', async (req, res) => { const client = await pool.connect(); try { await client.query('BEGIN'); const mov = (await client.query('SELECT * FROM movements WHERE id=\',[req.params.id])).rows[0]; if (!mov) return res.status(404).json({ error: 'Movimiento no encontrado' }); if (mov.type==='PROD') return res.status(400).json({ error: 'Use el modulo de Produccion para revertir.' }); const batch = (await client.query('SELECT * FROM batches WHERE id=\',[mov.batch_id])).rows[0]; if (batch) { if (mov.type==='IN') { const nq = batch.quantity-mov.quantity; if (nq<0) return res.status(400).json({ error: 'No se puede borrar, stock ya utilizado.' }); if (nq<=0) await client.query('DELETE FROM batches WHERE id=\',[mov.batch_id]); else await client.query('UPDATE batches SET quantity=\ WHERE id=\',[nq,mov.batch_id]); } else { await client.query('UPDATE batches SET quantity=\ WHERE id=\',[batch.quantity+mov.quantity,mov.batch_id]); } } await client.query('DELETE FROM movements WHERE id=\',[req.params.id]); await client.query('COMMIT'); res.json({ success: true }); } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); } finally { client.release(); } });
+app.get('/api/production', async (req, res) => { try { const prods = (await pool.query('SELECT * FROM production ORDER BY date DESC')).rows; const ings = (await pool.query('SELECT pi.*,m.name as material_name,m.category as material_category,b.lote,m.unit FROM production_ingredients pi JOIN batches b ON pi.batch_id=b.id JOIN materials m ON b.material_id=m.id')).rows; res.json(prods.map(p => ({ ...p, ingredients: ings.filter(i => i.production_id===p.id) }))); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.delete('/api/production/:id', async (req, res) => { const client = await pool.connect(); try { await client.query('BEGIN'); const prod = (await client.query('SELECT * FROM production WHERE id=\',[req.params.id])).rows[0]; if (!prod) return res.status(404).json({ error: 'Produccion no encontrada' }); const ings = (await client.query('SELECT * FROM production_ingredients WHERE production_id=\',[req.params.id])).rows; for (const ing of ings) { await client.query('UPDATE batches SET quantity=quantity+\ WHERE id=\',[ing.quantity,ing.batch_id]); } await client.query('DELETE FROM movements WHERE description=\',['Produccion: '+prod.pt_name+' (Lote: '+prod.pt_lote+')']); await client.query('DELETE FROM pt_movements WHERE pt_lote=\ AND type=\',[prod.pt_lote,'PROD']); await client.query('DELETE FROM production_ingredients WHERE production_id=\',[req.params.id]); await client.query('DELETE FROM production WHERE id=\',[req.params.id]); await client.query('COMMIT'); res.json({ success: true }); } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); } finally { client.release(); } });
+app.get('/api/pt_stock', async (req, res) => { try { res.json((await pool.query('SELECT pt_name,unit,SUM(CASE WHEN type=\ THEN quantity ELSE -quantity END) as total_quantity FROM pt_movements GROUP BY pt_name,unit HAVING SUM(CASE WHEN type=\ THEN quantity ELSE -quantity END)>0 ORDER BY pt_name',['PROD'])).rows); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.get('/api/pt_batches', async (req, res) => { try { res.json((await pool.query('SELECT pt_name,pt_lote,unit,MIN(date) as date,SUM(CASE WHEN type=\ THEN quantity ELSE -quantity END) as total_quantity FROM pt_movements GROUP BY pt_name,pt_lote,unit HAVING SUM(CASE WHEN type=\ THEN quantity ELSE -quantity END)>0 ORDER BY pt_name,pt_lote',['PROD'])).rows); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.get('/api/pt_history', async (req, res) => { try { res.json((await pool.query('SELECT * FROM pt_movements ORDER BY date DESC LIMIT 100')).rows); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.post('/api/pt_dispatch', async (req, res) => { try { const { pt_name, pt_lote, quantity, unit, destination } = req.body; const r = await pool.query('INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination) VALUES (\,\,\,\,\,\) RETURNING id',[pt_name,pt_lote,quantity,unit,'OUT',destination||'GUARDA']); res.json({ success: true, id: r.rows[0].id }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.delete('/api/pt_dispatch/:id', async (req, res) => { try { const mov = (await pool.query('SELECT * FROM pt_movements WHERE id=\ AND type=\',[req.params.id,'OUT'])).rows[0]; if (!mov) return res.status(404).json({ error: 'Despacho no encontrado' }); await pool.query('DELETE FROM pt_movements WHERE id=\',[req.params.id]); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.get('/api/production/sessions', async (req, res) => { try { const sessions = (await pool.query('SELECT * FROM production_sessions WHERE status=\ ORDER BY start_date DESC',['ACTIVE'])).rows; const ings = (await pool.query('SELECT psi.*,m.name as material_name,b.lote,m.unit FROM production_session_ingredients psi JOIN batches b ON psi.batch_id=b.id JOIN materials m ON b.material_id=m.id')).rows; const prog = (await pool.query('SELECT * FROM production_progress')).rows; res.json(sessions.map(s => ({ ...s, ingredients: ings.filter(i=>i.session_id===s.id), progress: prog.filter(p=>p.session_id===s.id) }))); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.post('/api/production/sessions/progress', async (req, res) => { try { const { session_id, quantity, unit } = req.body; if (!session_id||!quantity||!unit) return res.status(400).json({ error: 'Datos incompletos' }); const r = await pool.query('INSERT INTO production_progress (session_id,quantity,unit) VALUES (\,\,\) RETURNING id',[session_id,quantity,unit]); res.json({ success: true, id: r.rows[0].id }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.post('/api/production/sessions/start', async (req, res) => { const client = await pool.connect(); try { await client.query('BEGIN'); const { ingredients, description, product_name, format } = req.body; if (!ingredients||!ingredients.length) return res.status(400).json({ error: 'Se requiere al menos una materia prima' }); for (const ing of ingredients) { const b = (await client.query('SELECT b.*,m.name FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=\',[ing.batch_id])).rows[0]; if (!b) throw new Error('Lote no encontrado'); if (b.quantity<ing.quantity) throw new Error('Stock insuficiente para '+b.name); } const s = await client.query('INSERT INTO production_sessions (description,product_name,format) VALUES (\,\,\) RETURNING id',[description||'Nueva carga',product_name,format||'CAJAS']); const sid = s.rows[0].id; for (const ing of ingredients) { const b = (await client.query('SELECT * FROM batches WHERE id=\',[ing.batch_id])).rows[0]; await client.query('UPDATE batches SET quantity=\ WHERE id=\',[b.quantity-ing.quantity,ing.batch_id]); await client.query('INSERT INTO production_session_ingredients (session_id,batch_id,quantity) VALUES (\,\,\)',[sid,ing.batch_id,ing.quantity]); await client.query('INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES (\,\,\,\,\,\)',[b.material_id,ing.batch_id,b.lote,'PROD',ing.quantity,'Carga Produccion: Sesion '+sid]); } await client.query('COMMIT'); res.json({ success: true, id: sid }); } catch (e) { await client.query('ROLLBACK'); res.status(400).json({ error: e.message }); } finally { client.release(); } });
+app.post('/api/production/sessions/refill', async (req, res) => { const client = await pool.connect(); try { await client.query('BEGIN'); const { session_id, ingredients } = req.body; for (const ing of ingredients) { const b = (await client.query('SELECT b.*,m.name FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=\',[ing.batch_id])).rows[0]; if (!b) throw new Error('Lote no encontrado'); if (b.quantity<ing.quantity) throw new Error('Stock insuficiente para '+b.name); await client.query('UPDATE batches SET quantity=\ WHERE id=\',[b.quantity-ing.quantity,ing.batch_id]); await client.query('INSERT INTO production_session_ingredients (session_id,batch_id,quantity) VALUES (\,\,\)',[session_id,ing.batch_id,ing.quantity]); await client.query('INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES (\,\,\,\,\,\)',[b.material_id,ing.batch_id,b.lote,'PROD',ing.quantity,'Recarga Produccion: Sesion '+session_id]); } await client.query('COMMIT'); res.json({ success: true }); } catch (e) { await client.query('ROLLBACK'); res.status(400).json({ error: e.message }); } finally { client.release(); } });
+app.post('/api/production/sessions/finish', async (req, res) => { const client = await pool.connect(); try { await client.query('BEGIN'); const { session_id, pt_name, pt_lote, pt_quantity, pt_unit, crumble_waste, est1_final_est, est2_final_est, kg_frambuesa_total, recover_e1, recover_e2 } = req.body; const valE1=parseFloat(est1_final_est)||0; const valE2=parseFloat(est2_final_est)||0; const session=(await client.query('SELECT * FROM production_sessions WHERE id=\ AND status=\',[session_id,'ACTIVE'])).rows[0]; if (!session) return res.status(404).json({ error: 'Sesion no encontrada' }); const ings=(await client.query('SELECT psi.*,m.id as material_id,m.name as material_name,b.lote FROM production_session_ingredients psi JOIN batches b ON psi.batch_id=b.id JOIN materials m ON b.material_id=m.id WHERE psi.session_id=\',[session_id])).rows; const prod=await client.query('INSERT INTO production (pt_name,pt_lote,pt_quantity,pt_unit,crumble_waste,est1_final_est,est2_final_est,kg_frambuesa_total) VALUES (\,\,\,\,\,\,\,\) RETURNING id',[pt_name,pt_lote,pt_quantity,pt_unit||'Cajas',crumble_waste||0,valE1,valE2,kg_frambuesa_total||0]); const pid=prod.rows[0].id; for (const ing of ings) { await client.query('INSERT INTO production_ingredients (production_id,batch_id,quantity) VALUES (\,\,\)',[pid,ing.batch_id,ing.quantity]); } await client.query('UPDATE production_sessions SET status=\ WHERE id=\',['FINISHED',session_id]); await client.query('INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination) VALUES (\,\,\,\,\,\)',[pt_name,pt_lote,pt_quantity,pt_unit||'Cajas','PROD','BODEGA']); if (parseFloat(crumble_waste)>0) { await client.query('INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination) VALUES (\,\,\,\,\,\)',['Merma Crumble',pt_lote,crumble_waste,'Kg','PROD','BODEGA']); } await client.query('COMMIT'); res.json({ success: true, id: pid }); } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); } finally { client.release(); } });
+app.delete('/api/production/sessions/:id', async (req, res) => { const client = await pool.connect(); try { await client.query('BEGIN'); const session=(await client.query('SELECT * FROM production_sessions WHERE id=\ AND status=\',[req.params.id,'ACTIVE'])).rows[0]; if (!session) return res.status(404).json({ error: 'Sesion no encontrada' }); const ings=(await client.query('SELECT * FROM production_session_ingredients WHERE session_id=\',[req.params.id])).rows; for (const ing of ings) { await client.query('UPDATE batches SET quantity=quantity+\ WHERE id=\',[ing.quantity,ing.batch_id]); } await client.query('DELETE FROM movements WHERE description=\',['Carga Produccion: Sesion '+req.params.id]); await client.query('UPDATE production_sessions SET status=\ WHERE id=\',['CANCELLED',req.params.id]); await client.query('COMMIT'); res.json({ success: true }); } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); } finally { client.release(); } });
+app.get('/api/usuarios', authMiddleware, async (req, res) => { if (req.user.rol!=='admin') return res.status(403).json({ error: 'Sin permisos' }); try { const r = await pool.query('SELECT id,username,nombre,rol,permisos,activo FROM usuarios ORDER BY id'); res.json(r.rows.map(u => ({ ...u, permisos: JSON.parse(u.permisos||'{}') }))); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.post('/api/usuarios', authMiddleware, async (req, res) => { if (req.user.rol!=='admin') return res.status(403).json({ error: 'Sin permisos' }); try { const { username, password, nombre, rol, permisos } = req.body; const hash = bcrypt.hashSync(password, 10); const r = await pool.query('INSERT INTO usuarios (username,password_hash,nombre,rol,permisos) VALUES (\,\,\,\,\) RETURNING id',[username,hash,nombre,rol||'operador',JSON.stringify(permisos||{})]); await logAudit(req.user.id, req.user.username, 'CREAR_USUARIO', 'Creo usuario: '+username); res.json({ success: true, id: r.rows[0].id }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.put('/api/usuarios/:id', authMiddleware, async (req, res) => { if (req.user.rol!=='admin') return res.status(403).json({ error: 'Sin permisos' }); try { const { nombre, rol, permisos, activo, password } = req.body; if (password) { const hash = bcrypt.hashSync(password, 10); await pool.query('UPDATE usuarios SET nombre=\,rol=\,permisos=\,activo=\,password_hash=\ WHERE id=\',[nombre,rol,JSON.stringify(permisos||{}),activo?1:0,hash,req.params.id]); } else { await pool.query('UPDATE usuarios SET nombre=\,rol=\,permisos=\,activo=\ WHERE id=\',[nombre,rol,JSON.stringify(permisos||{}),activo?1:0,req.params.id]); } await logAudit(req.user.id, req.user.username, 'EDITAR_USUARIO', 'Edito usuario ID: '+req.params.id); res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.get('/api/audit_log', authMiddleware, async (req, res) => { if (req.user.rol!=='admin') return res.status(403).json({ error: 'Sin permisos' }); try { res.json((await pool.query('SELECT * FROM audit_log ORDER BY fecha DESC LIMIT 100')).rows); } catch (e) { res.status(500).json({ error: e.message }); } });
+app.listen(PORT, () => console.log('Server running on port '+PORT));

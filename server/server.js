@@ -72,9 +72,9 @@ app.post('/api/auth/login', async (req, res) => {
     const r = await pool.query('SELECT * FROM usuarios WHERE username=$1 AND activo=1', [username]);
     const user = r.rows[0];
     if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ error: 'Credenciales incorrectas' });
-    const token = jwt.sign({ id: user.id, username: user.username, rol: user.rol, nombre: user.nombre, permisos: JSON.parse(user.permisos||'{}') }, JWT_SECRET, { expiresIn: '12h' });
+    const token = jwt.sign({ id: user.id, username: user.username, rol: user.rol, nombre: user.nombre, permisos: (typeof user.permisos === 'string' ? JSON.parse(user.permisos||'{}') : (user.permisos||{})) }, JWT_SECRET, { expiresIn: '12h' });
     await logAudit(user.id, user.username, 'LOGIN', 'Inicio de sesion');
-    res.json({ token, user: { id: user.id, username: user.username, nombre: user.nombre, rol: user.rol, permisos: JSON.parse(user.permisos||'{}') } });
+    res.json({ token, user: { id: user.id, username: user.username, nombre: user.nombre, rol: user.rol, permisos: (typeof user.permisos === 'string' ? JSON.parse(user.permisos||'{}') : (user.permisos||{})) } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

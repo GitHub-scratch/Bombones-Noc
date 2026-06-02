@@ -55,7 +55,7 @@ export default function Sidebar({ activeTab, setActiveTab, lowStockCount, curren
       {/* Navigation */}
       <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto custom-scrollbar">
         {menuItems.map(({ id, icon: Icon, label }) => {
-          let tienePermiso = !permisos || permisos[id] !== false;
+          const esAdmin = currentUser?.rol === 'admin'; let tienePermiso = esAdmin || !permisos || permisos[id] !== false;
           if (id === 'inventory') {
             tienePermiso = !permisos || permisos.inventory !== false || permisos.inventory_in !== false || permisos.inventory_out !== false;
           }

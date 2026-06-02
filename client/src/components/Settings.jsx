@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-PlusCircle, Trash2, Settings as SettingsIcon, Edit3, Save, X,
+PlusCircle, Trash2, Settings as SettingsIcon, Edit3, Save, X, Users, Shield,
   RefreshCw, Check, AlertCircle, Lock, UserPlus, Key
 } from 'lucide-react';
 

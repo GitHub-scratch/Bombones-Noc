@@ -57,7 +57,7 @@ export default function Sidebar({ activeTab, setActiveTab, lowStockCount, curren
         {menuItems.map(({ id, icon: Icon, label }) => {
           let tienePermiso = !permisos || permisos[id] !== false;
           if (id === 'inventory') {
-            tienePermiso = permisos?.inventory_in || permisos?.inventory_out || permisos?.inventory;
+            tienePermiso = !permisos || permisos.inventory !== false || permisos.inventory_in !== false || permisos.inventory_out !== false;
           }
           const isActive = activeTab === id;
           const badge = id === 'dashboard' ? lowStockCount : 0;

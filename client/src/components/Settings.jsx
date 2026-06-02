@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
 PlusCircle, Trash2, Settings as SettingsIcon, Edit3, Save, X,
-  Check, AlertCircle, Lock, UserPlus, Key
+  RefreshCw, Check, AlertCircle, Lock, UserPlus, Key
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';

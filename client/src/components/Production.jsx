@@ -312,21 +312,28 @@ export default function Production({ materials, stock, productionHistory, active
       doc.setFont('helvetica', 'bold');
       doc.text('Resumen del Producto Terminado', 105, currentY - 2, { align: 'center' });
 
-      const ingredientRows = prod.ingredients.map(ing => [
-        ing.material_name,
-        ing.lote,
-        ing.quantity,
-        '', // Salida kg
-        ''  // Mermas
-      ]);
+     const frambuesaIng = (prod.ingredients || []).find(ing => {
+  const name = (ing.material_name || '').toLowerCase();
+  return name.includes('frambuesa') || name.includes('raspberry');
+});
 
-      // Añadir filas de Mermas y Procesos si existen
-      if (prod.crumble_waste > 0) {
-        ingredientRows.push(['Merma Crumble', prod.pt_lote, '', '', `${prod.crumble_waste} kg`]);
-      }
-      if (prod.kg_frambuesa_total > 0) {
-        ingredientRows.push(['Frambuesa Utilizada', prod.pt_lote, `${prod.kg_frambuesa_total} kg`, '', '']);
-      }
+const loteFrambuesa = frambuesaIng?.lote || 'S/L';
+
+const ingredientRows = prod.ingredients.map(ing => [
+  ing.material_name,
+  ing.lote,
+  ing.quantity,
+  '', // Salida kg
+  '' // Mermas
+]);
+
+// Añadir filas de Mermas y Procesos si existen
+if (prod.crumble_waste > 0) {
+  ingredientRows.push(['Merma Crumble', loteFrambuesa, '', '', `${prod.crumble_waste} kg`]);
+}
+if (prod.kg_frambuesa_total > 0) {
+  ingredientRows.push(['Frambuesa Utilizada', loteFrambuesa, `${prod.kg_frambuesa_total} kg`, '', '']);
+}
 
       // Filas de Totales
       const totalPotes = prod.pt_unit === 'Cajas' ? (parseFloat(prod.pt_quantity) * 24) : '';

@@ -272,11 +272,20 @@ app.get('/api/production/sessions', async (req, res) => {
 
 app.post('/api/production/sessions/progress', async (req, res) => {
   try {
-    const { session_id, quantity, unit } = req.body;
-    if (!session_id||!quantity||!unit) return res.status(400).json({ error: 'Datos incompletos' });
-    const r = await pool.query('INSERT INTO production_progress (session_id,quantity,unit) VALUES ($1,$2,$3) RETURNING id',[session_id,quantity,unit]);
+    const { session_id, quantity, unit, material_id, batch_id, lote } = req.body;
+    if (!session_id || !quantity || !unit) {
+      return res.status(400).json({ error: 'Datos incompletos' });
+    }
+
+    const r = await pool.query(
+      'INSERT INTO production_progress (session_id,quantity,unit,material_id,batch_id,lote) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [session_id, quantity, unit, material_id || null, batch_id || null, lote || null]
+    );
+
     res.json({ success: true, id: r.rows[0].id });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/production/sessions/start', async (req, res) => {

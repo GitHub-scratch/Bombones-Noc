@@ -321,7 +321,7 @@ const [searchTerm, setSearchTerm] = useState('');
   return name.includes('frambuesa') || name.includes('raspberry');
 });
 
-const loteFrambuesa = frambuesaIng?.lote || 'S/L';
+const loteFrambuesa = prod.frambuesa_lote || frambuesaIng?.lote || 'S/L';
 
 const ingredientRows = prod.ingredients.map(ing => [
   ing.material_name,

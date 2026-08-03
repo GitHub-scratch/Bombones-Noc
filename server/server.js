@@ -292,153 +292,370 @@ app.post('/api/production/sessions/start', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     const { ingredients, description, product_name, format } = req.body;
-    if (!ingredients||!ingredients.length) return res.status(400).json({ error: 'Se requiere al menos una materia prima' });
+
+    if (!ingredients || !ingredients.length) {
+      return res.status(400).json({ error: 'Se requiere al menos una materia prima' });
+    }
+
     for (const ing of ingredients) {
-      const b = (await client.query('SELECT b.*,m.name FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',[ing.batch_id])).rows[0];
+      const b = (
+        await client.query(
+          'SELECT b.*, m.name FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',
+          [ing.batch_id]
+        )
+      ).rows[0];
+
       if (!b) throw new Error('Lote no encontrado');
-      if (b.quantity<ing.quantity) throw new Error('Stock insuficiente para '+b.name);
+      if ((parseFloat(b.quantity) || 0) < (parseFloat(ing.quantity) || 0)) {
+        throw new Error(`Stock insuficiente para ${b.name}`);
+      }
     }
-    const s = await client.query('INSERT INTO production_sessions (description,product_name,format) VALUES ($1,$2,$3) RETURNING id',[description||'Nueva carga',product_name,format||'CAJAS']);
-    const sid = s.rows[0].id;
+
+    const s = await client.query(
+      'INSERT INTO production_sessions (description,product_name,format) VALUES ($1,$2,$3) RETURNING id',
+      [description || '', product_name || '', format || 'CAJAS']
+    );
+
+    const sessionId = s.rows[0].id;
+
     for (const ing of ingredients) {
-      const b = (await client.query('SELECT * FROM batches WHERE id=$1',[ing.batch_id])).rows[0];
-      await client.query('UPDATE batches SET quantity=$1 WHERE id=$2',[b.quantity-ing.quantity,ing.batch_id]);
-      await client.query('INSERT INTO production_session_ingredients (session_id,batch_id,quantity) VALUES ($1,$2,$3)',[sid,ing.batch_id,ing.quantity]);
-      await client.query('INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES ($1,$2,$3,$4,$5,$6)',[b.material_id,ing.batch_id,b.lote,'PROD',ing.quantity,'Carga Produccion: Sesion '+sid]);
+      const qty = parseFloat(ing.quantity) || 0;
+
+      await client.query(
+        'INSERT INTO production_session_ingredients (session_id,batch_id,quantity) VALUES ($1,$2,$3)',
+        [sessionId, ing.batch_id, qty]
+      );
+
+      const b = (
+        await client.query(
+          'SELECT b.*, m.name, m.material_id FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',
+          [ing.batch_id]
+        )
+      ).rows[0];
+
+      await client.query(
+        'UPDATE batches SET quantity = quantity - $1 WHERE id = $2',
+        [qty, ing.batch_id]
+      );
+
+      await client.query(
+        `INSERT INTO movements (material_id,batch_id,lote,type,quantity,description)
+         VALUES ($1,$2,$3,'PROD',$4,$5)`,
+        [
+          b.material_id,
+          ing.batch_id,
+          b.lote,
+          qty,
+          'Carga Produccion: Sesion ' + sessionId
+        ]
+      );
     }
+
     await client.query('COMMIT');
-    res.json({ success: true, id: sid });
-  } catch (e) { await client.query('ROLLBACK'); res.status(400).json({ error: e.message }); }
-  finally { client.release(); }
+    res.json({ success: true, id: sessionId });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 app.post('/api/production/sessions/refill', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     const { session_id, ingredients } = req.body;
-    for (const ing of ingredients) {
-      const b = (await client.query('SELECT b.*,m.name FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',[ing.batch_id])).rows[0];
-      if (!b) throw new Error('Lote no encontrado');
-      if (b.quantity<ing.quantity) throw new Error('Stock insuficiente para '+b.name);
-      await client.query('UPDATE batches SET quantity=$1 WHERE id=$2',[b.quantity-ing.quantity,ing.batch_id]);
-      await client.query('INSERT INTO production_session_ingredients (session_id,batch_id,quantity) VALUES ($1,$2,$3)',[session_id,ing.batch_id,ing.quantity]);
-      await client.query('INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES ($1,$2,$3,$4,$5,$6)',[b.material_id,ing.batch_id,b.lote,'PROD',ing.quantity,'Recarga Produccion: Sesion '+session_id]);
+
+    if (!session_id || !ingredients || !ingredients.length) {
+      return res.status(400).json({ error: 'Datos incompletos' });
     }
+
+    const session = (
+      await client.query(
+        "SELECT * FROM production_sessions WHERE id=$1 AND status='ACTIVE'",
+        [session_id]
+      )
+    ).rows[0];
+
+    if (!session) {
+      return res.status(404).json({ error: 'Sesion no encontrada' });
+    }
+
+    for (const ing of ingredients) {
+      const b = (
+        await client.query(
+          'SELECT b.*, m.name FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',
+          [ing.batch_id]
+        )
+      ).rows[0];
+
+      if (!b) throw new Error('Lote no encontrado');
+      if ((parseFloat(b.quantity) || 0) < (parseFloat(ing.quantity) || 0)) {
+        throw new Error(`Stock insuficiente para ${b.name}`);
+      }
+    }
+
+    for (const ing of ingredients) {
+      const qty = parseFloat(ing.quantity) || 0;
+
+      await client.query(
+        'INSERT INTO production_session_ingredients (session_id,batch_id,quantity) VALUES ($1,$2,$3)',
+        [session_id, ing.batch_id, qty]
+      );
+
+      const b = (
+        await client.query(
+          'SELECT b.*, m.name FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',
+          [ing.batch_id]
+        )
+      ).rows[0];
+
+      await client.query(
+        'UPDATE batches SET quantity = quantity - $1 WHERE id = $2',
+        [qty, ing.batch_id]
+      );
+
+      await client.query(
+        `INSERT INTO movements (material_id,batch_id,lote,type,quantity,description)
+         VALUES ($1,$2,$3,'PROD',$4,$5)`,
+        [
+          b.material_id,
+          ing.batch_id,
+          b.lote,
+          qty,
+          'Recarga Produccion: Sesion ' + session_id
+        ]
+      );
+    }
+
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (e) { await client.query('ROLLBACK'); res.status(400).json({ error: e.message }); }
-  finally { client.release(); }
-});app.post('/api/production/sessions/finish', async (req, res) => {
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/api/production/sessions/finish', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { session_id, pt_name, pt_lote, pt_quantity, pt_unit, crumble_waste, est1_final_est, est2_final_est, kg_frambuesa_total, recover_e1, recover_e2 } = req.body;
-    const valE1 = parseFloat(est1_final_est)||0;
-    const valE2 = parseFloat(est2_final_est)||0;
-    const session = (await client.query("SELECT * FROM production_sessions WHERE id=$1 AND status='ACTIVE'",[session_id])).rows[0];
-    if (!session) return res.status(404).json({ error: 'Sesion no encontrada' });
-    const ings = (await client.query('SELECT psi.*,m.id as material_id,m.name as material_name,b.lote FROM production_session_ingredients psi JOIN batches b ON psi.batch_id=b.id JOIN materials m ON b.material_id=m.id WHERE psi.session_id=$1',[session_id])).rows;
-    const iqfRows = (await client.query(
-  `SELECT *
-   FROM production_progress
-   WHERE session_id=$1
-     AND (unit='Frambuesa' OR lote IS NOT NULL OR batch_id IS NOT NULL)`,
-  [session_id]
-)).rows;
 
-let frambuesaLote = null;
-let frambuesaTotal = 0;
+    const {
+      session_id,
+      pt_name,
+      pt_lote,
+      pt_quantity,
+      pt_unit,
+      crumble_waste,
+      est1_final_est,
+      est2_final_est,
+      kg_frambuesa_total,
+      recover_e1,
+      recover_e2
+    } = req.body;
 
-for (const row of iqfRows) {
-  const qty = parseFloat(row.quantity) || 0;
-  if (qty <= 0) continue;
+    const valE1 = parseFloat(est1_final_est) || 0;
+    const valE2 = parseFloat(est2_final_est) || 0;
 
-  frambuesaTotal += qty;
+    const session = (
+      await client.query(
+        "SELECT * FROM production_sessions WHERE id=$1 AND status='ACTIVE'",
+        [session_id]
+      )
+    ).rows[0];
 
-  if (!frambuesaLote && row.lote) {
-    frambuesaLote = row.lote;
-  }
-
-  if (row.batch_id) {
-    const batch = (await client.query(
-      'SELECT b.*, m.name as material_name FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',
-      [row.batch_id]
-    )).rows[0];
-
-    if (!batch) throw new Error('Lote de frambuesa no encontrado');
-    if ((parseFloat(batch.quantity) || 0) < qty) {
-      throw new Error(`Stock insuficiente para frambuesa en lote ${batch.lote}`);
+    if (!session) {
+      return res.status(404).json({ error: 'Sesion no encontrada' });
     }
 
-    await client.query(
-      'UPDATE batches SET quantity = quantity - $1 WHERE id = $2',
-      [qty, row.batch_id]
-    );
+    const ings = (
+      await client.query(
+        `SELECT psi.*, m.id as material_id, m.name as material_name, b.lote
+         FROM production_session_ingredients psi
+         JOIN batches b ON psi.batch_id=b.id
+         JOIN materials m ON b.material_id=m.id
+         WHERE psi.session_id=$1`,
+        [session_id]
+      )
+    ).rows;
 
-    await client.query(
-      `INSERT INTO movements (material_id,batch_id,lote,type,quantity,description)
-       VALUES ($1,$2,$3,'PROD',$4,$5)`,
+    const iqfRows = (
+      await client.query(
+        `SELECT *
+         FROM production_progress
+         WHERE session_id=$1
+           AND (unit='Frambuesa' OR lote IS NOT NULL OR batch_id IS NOT NULL)`,
+        [session_id]
+      )
+    ).rows;
+
+    let frambuesaLote = null;
+    let frambuesaTotal = 0;
+
+    for (const row of iqfRows) {
+      const qty = parseFloat(row.quantity) || 0;
+      if (qty <= 0) continue;
+
+      frambuesaTotal += qty;
+
+      if (!frambuesaLote && row.lote) {
+        frambuesaLote = row.lote;
+      }
+
+      if (row.batch_id) {
+        const batch = (
+          await client.query(
+            'SELECT b.*, m.name as material_name FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',
+            [row.batch_id]
+          )
+        ).rows[0];
+
+        if (!batch) throw new Error('Lote de frambuesa no encontrado');
+
+        if ((parseFloat(batch.quantity) || 0) < qty) {
+          throw new Error(`Stock insuficiente para frambuesa en lote ${batch.lote}`);
+        }
+
+        await client.query(
+          'UPDATE batches SET quantity = quantity - $1 WHERE id = $2',
+          [qty, row.batch_id]
+        );
+
+        await client.query(
+          `INSERT INTO movements (material_id,batch_id,lote,type,quantity,description)
+           VALUES ($1,$2,$3,'PROD',$4,$5)`,
+          [
+            batch.material_id,
+            row.batch_id,
+            batch.lote,
+            qty,
+            'Consumo Frambuesa Produccion: Sesion ' + session_id
+          ]
+        );
+
+        if (!frambuesaLote) {
+          frambuesaLote = batch.lote;
+        }
+      }
+    }
+
+    const frambuesaFinal = parseFloat(kg_frambuesa_total) || frambuesaTotal || 0;
+
+    const prod = await client.query(
+      `INSERT INTO production
+       (pt_name,pt_lote,pt_quantity,pt_unit,crumble_waste,est1_final_est,est2_final_est,kg_frambuesa_total,frambuesa_lote)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id`,
       [
-        batch.material_id,
-        row.batch_id,
-        batch.lote,
-        qty,
-        'Consumo Frambuesa Produccion: Sesion ' + session_id
+        pt_name,
+        pt_lote,
+        pt_quantity,
+        pt_unit || 'Cajas',
+        crumble_waste || 0,
+        valE1,
+        valE2,
+        frambuesaFinal,
+        frambuesaLote
       ]
     );
 
-    if (!frambuesaLote) {
-      frambuesaLote = batch.lote;
-    }
-  }
-}
-    const frambuesaFinal = parseFloat(kg_frambuesa_total) || frambuesaTotal || 0;
-
-const prod = await client.query(
-  'INSERT INTO production (pt_name,pt_lote,pt_quantity,pt_unit,crumble_waste,est1_final_est,est2_final_est,kg_frambuesa_total,frambuesa_lote) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
-  [
-    pt_name,
-    pt_lote,
-    pt_quantity,
-    pt_unit || 'Cajas',
-    crumble_waste || 0,
-    valE1,
-    valE2,
-    frambuesaFinal,
-    frambuesaLote
-  ]
-);
     const pid = prod.rows[0].id;
+
     for (const ing of ings) {
-      await client.query('INSERT INTO production_ingredients (production_id,batch_id,quantity) VALUES ($1,$2,$3)',[pid,ing.batch_id,ing.quantity]);
+      await client.query(
+        'INSERT INTO production_ingredients (production_id,batch_id,quantity) VALUES ($1,$2,$3)',
+        [pid, ing.batch_id, ing.quantity]
+      );
     }
-    await client.query("UPDATE production_sessions SET status='FINISHED' WHERE id=$1",[session_id]);
-    if (recover_e1 && valE1>0) {
-      const baseIng = ings.find(i => (i.material_name||'').toLowerCase().includes('blanco')||(i.material_name||'').toLowerCase().includes('white'));
+
+    await client.query(
+      "UPDATE production_sessions SET status='FINISHED' WHERE id=$1",
+      [session_id]
+    );
+
+    if (recover_e1 && valE1 > 0) {
+      const baseIng = ings.find(i => {
+        const n = (i.material_name || '').toLowerCase();
+        return n.includes('blanco') || n.includes('white');
+      });
+
       if (baseIng) {
-        const loteRec = 'rec-'+(baseIng.lote||'S/L');
-        const nb = await client.query('INSERT INTO batches (material_id,lote,quantity,expiry_date) VALUES ($1,$2,$3,$4) RETURNING id',[baseIng.material_id,loteRec,valE1,'N/A']);
-        await client.query("INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES ($1,$2,$3,'IN',$4,$5)",[baseIng.material_id,nb.rows[0].id,loteRec,valE1,'Recuperado Estanque 1 - Sesion '+session_id]);
+        const loteRec = 'rec-' + (baseIng.lote || 'S/L');
+        const nb = await client.query(
+          'INSERT INTO batches (material_id,lote,quantity,expiry_date) VALUES ($1,$2,$3,$4) RETURNING id',
+          [baseIng.material_id, loteRec, valE1, 'N/A']
+        );
+
+        await client.query(
+          `INSERT INTO movements (material_id,batch_id,lote,type,quantity,description)
+           VALUES ($1,$2,$3,'IN',$4,$5)`,
+          [
+            baseIng.material_id,
+            nb.rows[0].id,
+            loteRec,
+            valE1,
+            'Recuperado Estanque 1 - Sesion ' + session_id
+          ]
+        );
       }
     }
-    if (recover_e2 && valE2>0) {
-      const cobIng = ings.find(i => { const n=(i.material_name||'').toLowerCase(); return n.includes('leche')||n.includes('cobertura')||n.includes('amargo')||n.includes('dark'); });
+
+    if (recover_e2 && valE2 > 0) {
+      const cobIng = ings.find(i => {
+        const n = (i.material_name || '').toLowerCase();
+        return n.includes('leche') || n.includes('cobertura') || n.includes('amargo') || n.includes('dark');
+      });
+
       if (cobIng) {
-        const loteRec = 'rec-'+(cobIng.lote||'S/L');
-        const nb = await client.query('INSERT INTO batches (material_id,lote,quantity,expiry_date) VALUES ($1,$2,$3,$4) RETURNING id',[cobIng.material_id,loteRec,valE2,'N/A']);
-        await client.query("INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES ($1,$2,$3,'IN',$4,$5)",[cobIng.material_id,nb.rows[0].id,loteRec,valE2,'Recuperado Estanque 2 - Sesion '+session_id]);
+        const loteRec = 'rec-' + (cobIng.lote || 'S/L');
+        const nb = await client.query(
+          'INSERT INTO batches (material_id,lote,quantity,expiry_date) VALUES ($1,$2,$3,$4) RETURNING id',
+          [cobIng.material_id, loteRec, valE2, 'N/A']
+        );
+
+        await client.query(
+          `INSERT INTO movements (material_id,batch_id,lote,type,quantity,description)
+           VALUES ($1,$2,$3,'IN',$4,$5)`,
+          [
+            cobIng.material_id,
+            nb.rows[0].id,
+            loteRec,
+            valE2,
+            'Recuperado Estanque 2 - Sesion ' + session_id
+          ]
+        );
       }
     }
-    await client.query("INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination) VALUES ($1,$2,$3,$4,'PROD','BODEGA')",[pt_name,pt_lote,pt_quantity,pt_unit||'Cajas']);
-    if (parseFloat(crumble_waste)>0) {
-      await client.query("INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination) VALUES ('Merma Crumble',$1,$2,'Kg','PROD','BODEGA')",[pt_lote,crumble_waste]);
+
+    await client.query(
+      `INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination)
+       VALUES ($1,$2,$3,$4,'PROD','BODEGA')`,
+      [pt_name, pt_lote, pt_quantity, pt_unit || 'Cajas']
+    );
+
+    if (parseFloat(crumble_waste) > 0) {
+      await client.query(
+        `INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination)
+         VALUES ('Merma Crumble',$1,$2,'Kg','PROD','BODEGA')`,
+        [pt_lote, crumble_waste]
+      );
     }
+
     await client.query('COMMIT');
     res.json({ success: true, id: pid });
-  } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
-  finally { client.release(); }
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 app.delete('/api/production/sessions/:id', async (req, res) => {

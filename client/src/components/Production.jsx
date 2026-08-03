@@ -738,21 +738,85 @@ if (prod.kg_frambuesa_total > 0) {
                       </form>
 
                       {/* FORMULARIO VERTIDO IQF (DINÁMICO) */}
-                      <form onSubmit={(e) => {
-                        e.preventDefault();
-                        const val = e.target.qty.value;
-                        handleProgress(finishingSession.id, val === '' ? 1 : val, 'Frambuesa');
-                        e.target.reset();
-                      }} className="flex gap-2 h-28">
-                         <div className="flex-1 flex flex-col bg-blue-50/50 rounded-[2.5rem] border border-blue-100/50 shadow-inner p-4 hover:bg-white transition-all group">
-                            <p className="text-[9px] font-black text-blue-400 uppercase text-center mb-1.5 tracking-widest group-hover:text-blue-600 transition-colors">Vertido IQF</p>
-                            <input name="qty" type="number" step="0.1" placeholder="1.0" className="w-full flex-1 bg-transparent text-center text-2xl font-black text-blue-600 outline-none placeholder:text-blue-300" />
-                         </div>
-                         <button type="submit" className="h-full px-5 bg-blue-500 text-white rounded-[2.5rem] shadow-xl shadow-blue-200 flex flex-col items-center justify-center hover:bg-blue-600 transition-all hover:scale-105 active:scale-95">
-                            <Plus size={24}/>
-                            <span className="text-[9px] font-black uppercase">KG</span>
-                         </button>
-                      </form>
+                      <form
+  onSubmit={(e) => {
+    e.preventDefault();
+    if (!iqfForm.material_id || !iqfForm.batch_id || !iqfForm.quantity) {
+      return showToast('Selecciona frambuesa, lote y cantidad', 'error');
+    }
+
+    const loteSeleccionado = stock.find(
+      s => s.batch_id === parseInt(iqfForm.batch_id)
+    );
+
+    handleProgress(finishingSession.id, iqfForm.quantity, 'Frambuesa', {
+      material_id: iqfForm.material_id,
+      batch_id: iqfForm.batch_id,
+      lote: loteSeleccionado?.lote || null
+    });
+
+    setIqfForm({ material_id: '', batch_id: '', quantity: '' });
+  }}
+  className="bg-blue-50/50 rounded-[2.5rem] border border-blue-100/50 shadow-inner p-4 hover:bg-white transition-all group space-y-3"
+>
+  <p className="text-[9px] font-black text-blue-400 uppercase text-center tracking-widest group-hover:text-blue-600 transition-colors">
+    Vertido IQF
+  </p>
+
+  <select
+    value={iqfForm.material_id}
+    onChange={e => setIqfForm({ ...iqfForm, material_id: e.target.value, batch_id: '' })}
+    className="w-full p-3 bg-white rounded-xl border-none font-bold text-blue-600 text-xs shadow-sm"
+    required
+  >
+    <option value="">Elegir frambuesa...</option>
+    {materials
+      .filter(m => {
+        const name = (m.name || '').toLowerCase();
+        const cat = (m.category || '').toLowerCase();
+        return name.includes('frambuesa') || name.includes('raspberry') || cat.includes('frambuesa');
+      })
+      .map(m => (
+        <option key={m.id} value={m.id}>{m.name}</option>
+      ))}
+  </select>
+
+  <select
+    value={iqfForm.batch_id}
+    onChange={e => setIqfForm({ ...iqfForm, batch_id: e.target.value })}
+    className="w-full p-3 bg-white rounded-xl border-none font-bold text-blue-600 text-xs shadow-sm"
+    required
+  >
+    <option value="">Elegir lote...</option>
+    {stock
+      .filter(s => s.material_id === parseInt(iqfForm.material_id))
+      .map(s => (
+        <option key={s.batch_id} value={s.batch_id}>
+          {s.lote} ({s.quantity} {s.unit})
+        </option>
+      ))}
+  </select>
+
+  <div className="flex gap-2">
+    <input
+      name="qty"
+      type="number"
+      step="0.1"
+      value={iqfForm.quantity}
+      onChange={e => setIqfForm({ ...iqfForm, quantity: e.target.value })}
+      placeholder="1.0"
+      className="w-full flex-1 p-3 bg-white rounded-xl border-none text-center text-xl font-black text-blue-600 outline-none placeholder:text-blue-300 shadow-sm"
+      required
+    />
+    <button
+      type="submit"
+      className="px-5 bg-blue-500 text-white rounded-2xl shadow-xl shadow-blue-200 flex flex-col items-center justify-center hover:bg-blue-600 transition-all hover:scale-105 active:scale-95"
+    >
+      <Plus size={24}/>
+      <span className="text-[9px] font-black uppercase">KG</span>
+    </button>
+  </div>
+</form>
                    </div>
 
                    <div className="grid grid-cols-3 gap-6 mt-6 pt-6 border-t border-slate-100 relative z-10">

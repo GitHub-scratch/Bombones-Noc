@@ -330,7 +330,7 @@ app.post('/api/production/sessions/start', async (req, res) => {
 
       const b = (
         await client.query(
-          'SELECT b.*, m.name, m.material_id FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',
+          'SELECT b.*, m.name, m.id as material_id FROM batches b JOIN materials m ON b.material_id=m.id WHERE b.id=$1',
           [ing.batch_id]
         )
       ).rows[0];

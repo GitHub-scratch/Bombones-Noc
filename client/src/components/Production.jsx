@@ -53,7 +53,8 @@ export default function Production({ materials, stock, productionHistory, active
     { id: 'refill-init', material_id: '', batch_id: '', quantity: '' }
   ]);
   const [expandedProd, setExpandedProd] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+const [iqfForm, setIqfForm] = useState({ material_id: '', batch_id: '', quantity: '' });
+const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [recoverE1, setRecoverE1] = useState(false);
@@ -91,20 +92,23 @@ export default function Production({ materials, stock, productionHistory, active
     KG_PER_10KG: 10        // 10 kilos por granel
   };
 
-  const handleProgress = async (sessionId, quantity, unit) => {
-    let finalQty = parseFloat(quantity);
-    try {
-      await axios.post(`${API_URL}/production/sessions/progress`, {
-        session_id: sessionId,
-        quantity: finalQty,
-        unit
-      });
-      await fetchData();
-      showToast(`Avance de ${quantity} ${unit} registrado`);
-    } catch (err) {
-      showToast('Error al registrar avance', 'error');
-    }
-  };
+  const handleProgress = async (sessionId, quantity, unit, extra = {}) => {
+  let finalQty = parseFloat(quantity);
+  try {
+    await axios.post(`${API_URL}/production/sessions/progress`, {
+      session_id: sessionId,
+      quantity: finalQty,
+      unit,
+      material_id: extra.material_id ? parseInt(extra.material_id) : null,
+      batch_id: extra.batch_id ? parseInt(extra.batch_id) : null,
+      lote: extra.lote || null
+    });
+    await fetchData();
+    showToast(`Avance de ${quantity} ${unit} registrado`);
+  } catch (err) {
+    showToast(err.response?.data?.error || 'Error al registrar avance', 'error');
+  }
+};
 
   const calculateTanks = (session) => {
     let initialBlanco = 0;

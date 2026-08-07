@@ -333,8 +333,7 @@ if (!ingredients || !ingredients.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Se requiere al menos una materia prima' });
     }
-    }
-
+    
     for (const ing of ingredients) {
       const b = (
         await client.query(
@@ -410,8 +409,7 @@ if (!session_id || !ingredients || !ingredients.length) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Datos incompletos' });
       }
-    }
-
+    
     const session = (
       await client.query(
         "SELECT * FROM production_sessions WHERE id=$1 AND status='ACTIVE'",

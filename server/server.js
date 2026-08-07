@@ -135,9 +135,15 @@ app.post('/api/inventory/out', async (req, res) => {
   try {
     await client.query('BEGIN');
     const { batch_id, quantity, description } = req.body;
-    const b = (await client.query('SELECT * FROM batches WHERE id=$1',[batch_id])).rows[0];
-    if (!b) return res.status(404).json({ error: 'Lote no encontrado' });
-    if (b.quantity < quantity) return res.status(400).json({ error: 'Stock insuficiente' });
+const b = (await client.query('SELECT * FROM batches WHERE id=$1',[batch_id])).rows[0];
+    if (!b) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Lote no encontrado' });
+    }
+    if (b.quantity < quantity) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Stock insuficiente' });
+    }
     await client.query('UPDATE batches SET quantity=$1 WHERE id=$2',[b.quantity-quantity,batch_id]);
     await client.query('INSERT INTO movements (material_id,batch_id,lote,type,quantity,description) VALUES ($1,$2,$3,$4,$5,$6)',[b.material_id,batch_id,b.lote,'OUT',quantity,description]);
     await client.query('COMMIT');
@@ -163,11 +169,20 @@ app.put('/api/movements/:id', async (req, res) => {
     await client.query('BEGIN');
     const { quantity, lote, description, date, cost_per_unit } = req.body;
     const mov = (await client.query('SELECT * FROM movements WHERE id=$1',[req.params.id])).rows[0];
-    if (!mov) return res.status(404).json({ error: 'Movimiento no encontrado' });
+    if (!mov) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Movimiento no encontrado' });
+    }
     const batch = (await client.query('SELECT * FROM batches WHERE id=$1',[mov.batch_id])).rows[0];
-    if (!batch) return res.status(404).json({ error: 'Lote no encontrado' });
+    if (!batch) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Lote no encontrado' });
+    }
     const newQty = mov.type==='IN' ? batch.quantity+(quantity-mov.quantity) : batch.quantity-(quantity-mov.quantity);
-    if (newQty<0) return res.status(400).json({ error: 'Stock negativo' });
+    if (newQty<0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Stock negativo' });
+    }
     await client.query('UPDATE batches SET quantity=$1,lote=$2,cost_per_unit=$3 WHERE id=$4',[newQty,lote,cost_per_unit!==undefined?parseFloat(cost_per_unit):batch.cost_per_unit,mov.batch_id]);
     await client.query('UPDATE movements SET quantity=$1,lote=$2,description=$3,date=$4 WHERE id=$5',[quantity,lote,description,date||mov.date,req.params.id]);
     await client.query('COMMIT');

@@ -217,6 +217,8 @@ await client.query('DELETE FROM movements WHERE id=$1', [req.params.id]);
         else await client.query('UPDATE batches SET quantity=$1 WHERE id=$2',[nq,mov.batch_id]);
       } else {
         await client.query('UPDATE batches SET quantity=$1 WHERE id=$2',[batch.quantity+mov.quantity,mov.batch_id]);
+    }
+  }
               
 await client.query('COMMIT');
     res.json({ success: true });

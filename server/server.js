@@ -174,18 +174,29 @@ app.put('/api/movements/:id', async (req, res) => {
     res.json({ success: true });
   } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
   finally { client.release(); }
-});app.delete('/api/movements/:id', async (req, res) => {
+});
+
+app.delete('/api/movements/:id', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const mov = (await client.query('SELECT * FROM movements WHERE id=$1',[req.params.id])).rows[0];
-    if (!mov) return res.status(404).json({ error: 'Movimiento no encontrado' });
-    if (mov.type==='PROD') return res.status(400).json({ error: 'Use el modulo de Produccion para revertir.' });
+    if (!mov) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Movimiento no encontrado' });
+    }
+    if (mov.type==='PROD') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Use el modulo de Produccion para revertir.' });
+    }
     const batch = (await client.query('SELECT * FROM batches WHERE id=$1',[mov.batch_id])).rows[0];
     if (batch) {
       if (mov.type==='IN') {
         const nq = batch.quantity-mov.quantity;
-        if (nq<0) return res.status(400).json({ error: 'Stock ya utilizado, no se puede borrar.' });
+        if (nq<0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Stock ya utilizado, no se puede borrar.' });
+        }
         if (nq<=0) await client.query('DELETE FROM batches WHERE id=$1',[mov.batch_id]);
         else await client.query('UPDATE batches SET quantity=$1 WHERE id=$2',[nq,mov.batch_id]);
       } else {
@@ -195,8 +206,12 @@ app.put('/api/movements/:id', async (req, res) => {
     await client.query('DELETE FROM movements WHERE id=$1',[req.params.id]);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
-  finally { client.release(); }
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 app.get('/api/production', async (req, res) => {

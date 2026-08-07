@@ -420,6 +420,21 @@ const ingredientes = prod.ingredients || [];
       // --- OBSERVACIONES ---
       doc.rect(10, currentY, 190, 25);
       doc.setFontSize(8);
+
+    // --- CODIGOS DE GUIA EXTERNA ---
+    if (prod.frambuesa_movement_code || prod.storage_movement_code) {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      if (prod.frambuesa_movement_code) {
+        doc.text(`Código Guía Retiro Frambuesa: ${prod.frambuesa_movement_code}`, 12, currentY);
+        currentY += 5;
+      }
+      if (prod.storage_movement_code) {
+        doc.text(`Código Guía Envío a Guarda: ${prod.storage_movement_code}`, 12, currentY);
+        currentY += 5;
+      }
+      currentY += 3;
+    }
       doc.setFont('helvetica', 'bold');
       doc.text('Observaciones:', 12, currentY + 5);
 

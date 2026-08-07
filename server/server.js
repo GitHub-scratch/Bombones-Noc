@@ -17,6 +17,19 @@ const LABELS_PATH = path.join(__dirname, '..', 'client', 'src', 'Etiquetas a imp
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 pool.connect(err => { if (err) console.error('Error PostgreSQL:', err.message); else console.log('Conectado a Supabase PostgreSQL'); });
 
+// Auto-migracion: asegurar columnas de trazabilidad de frambuesa y guias externas
+(async () => {
+  try {
+    await pool.query(`ALTER TABLE production ADD COLUMN IF NOT EXISTS frambuesa_lote TEXT`);
+    await pool.query(`ALTER TABLE production ADD COLUMN IF NOT EXISTS frambuesa_movement_code TEXT`);
+    await pool.query(`ALTER TABLE production ADD COLUMN IF NOT EXISTS storage_movement_code TEXT`);
+    await pool.query(`ALTER TABLE movements ADD COLUMN IF NOT EXISTS movement_code TEXT`);
+    console.log('Migracion de columnas de trazabilidad verificada correctamente');
+  } catch (e) {
+    console.error('Error en auto-migracion de columnas:', e.message);
+  }
+})();
+
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());

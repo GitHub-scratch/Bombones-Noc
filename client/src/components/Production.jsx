@@ -230,7 +230,9 @@ const [searchTerm, setSearchTerm] = useState('');
         est2_final_est: parseFloat(form.est2_final_est.value) || 0,
         kg_frambuesa_total: parseFloat(form.kg_frambuesa_total.value) || 0,
         recover_e1: recoverE1,
-        recover_e2: recoverE2
+        recover_e2: recoverE2,
+        frambuesa_movement_code: form.frambuesa_movement_code?.value || null,
+        storage_movement_code: form.storage_movement_code?.value || null
       });
       setFinishingSession(null);
       setRecoverE1(false);
@@ -987,10 +989,12 @@ const ingredientes = prod.ingredients || [];
                       </div>
                       <input name="crumble_waste" type="number" step="0.1" placeholder="Merma (KG)..." className="w-full p-3 bg-white rounded-xl border-none font-bold text-raspberry text-xs shadow-sm" />
                     </div>
+            <input name="frambuesa_movement_code" type="text" placeholder="Código Guía Retiro Frambuesa..." className="w-full p-3 bg-white rounded-xl border-none font-bold text-xs shadow-sm mt-2" />
+            <input name="storage_movement_code" type="text" placeholder="Código Guía Envío a Guarda..." className="w-full p-3 bg-white rounded-xl border-none font-bold text-xs shadow-sm mt-2" />
                     <button type="submit" className="w-full bg-raspberry text-white py-4 rounded-xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-raspberry/30 hover:scale-[1.02] active:scale-95 transition-all">
                        Finalizar Todo
                     </button>
-                  </div>
+</div>
                 </form>
               </div>
             </div>

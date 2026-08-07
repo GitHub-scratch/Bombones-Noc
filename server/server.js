@@ -23,7 +23,8 @@ pool.connect(err => { if (err) console.error('Error PostgreSQL:', err.message); 
     await pool.query(`ALTER TABLE production ADD COLUMN IF NOT EXISTS frambuesa_lote TEXT`);
     await pool.query(`ALTER TABLE production ADD COLUMN IF NOT EXISTS frambuesa_movement_code TEXT`);
     await pool.query(`ALTER TABLE production ADD COLUMN IF NOT EXISTS storage_movement_code TEXT`);
-    await pool.query(`ALTER TABLE movements ADD COLUMN IF NOT EXISTS movement_code TEXT`);
+        await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS movement_code TEXT`);
+        await pool.query(`ALTER TABLE movements ADD COLUMN IF NOT EXISTS movement_code TEXT`);
     console.log('Migracion de columnas de trazabilidad verificada correctamente');
   } catch (e) {
     console.error('Error en auto-migracion de columnas:', e.message);

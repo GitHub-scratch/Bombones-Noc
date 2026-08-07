@@ -204,7 +204,8 @@ app.delete('/api/movements/:id', async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Use el modulo de Produccion para revertir.' });
     }
-    const batch = (await client.query('SELECT * FROM batches WHERE id=$1',[mov.batch_id])).rows[0];
+await client.query('DELETE FROM movements WHERE id=$1', [req.params.id]);
+        const batch = (await client.query('SELECT * FROM batches WHERE id=$1',[mov.batch_id])).rows[0];
     if (batch) {
       if (mov.type==='IN') {
         const nq = batch.quantity-mov.quantity;
@@ -218,8 +219,7 @@ app.delete('/api/movements/:id', async (req, res) => {
         await client.query('UPDATE batches SET quantity=$1 WHERE id=$2',[batch.quantity+mov.quantity,mov.batch_id]);
       }
     }
-    await client.query('DELETE FROM movements WHERE id=$1',[req.params.id]);
-    await client.query('COMMIT');
+await client.query('COMMIT');
     res.json({ success: true });
   } catch (e) {
     await client.query('ROLLBACK');

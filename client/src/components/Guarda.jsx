@@ -119,6 +119,7 @@ export default function Guarda({ fetchData, showToast }) {
           ['Cantidad Despachada', `${data.quantity} ${data.unit}`],
           ['Formato de Empaque', data.packaging],
           ['Bodega Destino', data.destination],
+            ['Código de Guía Externa', data.movement_code || 'N/A']
           ['Estado', 'DESPACHADO']
         ],
         theme: 'grid',

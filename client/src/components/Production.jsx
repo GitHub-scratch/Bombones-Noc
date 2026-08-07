@@ -323,21 +323,67 @@ const [searchTerm, setSearchTerm] = useState('');
 
 const loteFrambuesa = prod.frambuesa_lote || frambuesaIng?.lote || 'S/L';
 
-const ingredientRows = prod.ingredients.map(ing => [
-  ing.material_name,
-  ing.lote,
-  ing.quantity,
-  '', // Salida kg
-  '' // Mermas
-]);
+const ingredientes = prod.ingredients || [];
 
-// Añadir filas de Mermas y Procesos si existen
-if (prod.crumble_waste > 0) {
-  ingredientRows.push(['Merma Crumble', loteFrambuesa, '', '', `${prod.crumble_waste} kg`]);
-}
-if (prod.kg_frambuesa_total > 0) {
-  ingredientRows.push(['Frambuesa Utilizada', loteFrambuesa, `${prod.kg_frambuesa_total} kg`, '', '']);
-}
+    const chocolateBaseIng = ingredientes.find(ing => {
+      const name = (ing.material_name || '').toLowerCase();
+      return name.includes('blanco') || name.includes('white');
+    });
+
+    const chocolateCoberturaIng = ingredientes.find(ing => {
+      const name = (ing.material_name || '').toLowerCase();
+      return (
+        name.includes('leche') ||
+        name.includes('milk') ||
+        name.includes('amargo') ||
+        name.includes('dark') ||
+        name.includes('rub') ||
+        name.includes('cobertura')
+      );
+    });
+
+    const est1Recuperado = parseFloat(prod.est1_final_est) || 0;
+    const est2Recuperado = parseFloat(prod.est2_final_est) || 0;
+
+    const chocolateBaseCargado = parseFloat(chocolateBaseIng?.quantity) || 0;
+    const chocolateCoberturaCargado = parseFloat(chocolateCoberturaIng?.quantity) || 0;
+
+    const mermaChocolateBase = Math.max(0, chocolateBaseCargado - est1Recuperado);
+    const mermaChocolateCobertura = Math.max(0, chocolateCoberturaCargado - est2Recuperado);
+
+    const ingredientRows = ingredientes.map(ing => {
+      const esChocolateBase = ing.material_name === chocolateBaseIng?.material_name && ing.lote === chocolateBaseIng?.lote;
+      const esChocolateCobertura = ing.material_name === chocolateCoberturaIng?.material_name && ing.lote === chocolateCoberturaIng?.lote;
+
+      let salidaProceso = '';
+      let merma = '';
+
+      if (esChocolateBase) {
+        salidaProceso = `${est1Recuperado.toFixed(2)} kg`;
+        merma = `${mermaChocolateBase.toFixed(2)} kg`;
+      }
+
+      if (esChocolateCobertura) {
+        salidaProceso = `${est2Recuperado.toFixed(2)} kg`;
+        merma = `${mermaChocolateCobertura.toFixed(2)} kg`;
+      }
+
+      return [
+        ing.material_name,
+        ing.lote,
+        `${(parseFloat(ing.quantity) || 0).toFixed(2)} kg`,
+        salidaProceso,
+        merma
+      ];
+    });
+
+    // Añadir filas de Mermas y Procesos si existen
+    if (prod.crumble_waste > 0) {
+      ingredientRows.push(['Merma Crumble', loteFrambuesa, '', '', `${prod.crumble_waste} kg`]);
+    }
+    if (prod.kg_frambuesa_total > 0) {
+      ingredientRows.push(['Frambuesa Utilizada', loteFrambuesa, `${prod.kg_frambuesa_total} kg`, '', '']);
+    }
 
       // Filas de Totales
       const totalPotes = prod.pt_unit === 'Cajas' ? (parseFloat(prod.pt_quantity) * 24) : '';

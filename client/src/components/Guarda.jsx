@@ -46,7 +46,8 @@ export default function Guarda({ fetchData, showToast }) {
       quantity: parseFloat(form.quantity.value),
       unit: selectedBatch.unit,
       destination: form.destination.value || 'GUARDA',
-      packaging: packagingType
+      packaging: packagingType,
+        movement_code: form.movement_code?.value || null
     };
 
     try {
@@ -263,6 +264,15 @@ export default function Guarda({ fetchData, showToast }) {
                 />
               </div>
             </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 dark:text-white/40 uppercase tracking-widest ml-2">Código de Guía (Bodega Externa)</label>
+            <input
+              name="movement_code"
+              placeholder="Ej: GUIA-00123"
+              className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2"
+            />
+          </div>
 
             <button 
               type="submit" 

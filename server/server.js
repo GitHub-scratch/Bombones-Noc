@@ -575,6 +575,16 @@ app.post('/api/production/sessions/finish', async (req, res) => {
       );
     }
 
+    for (const row of iqfRows) {
+      const qty = parseFloat(row.quantity) || 0;
+      if (qty > 0 && row.batch_id) {
+        await client.query(
+          'INSERT INTO production_ingredients (production_id,batch_id,quantity) VALUES ($1,$2,$3)',
+          [pid, row.batch_id, qty]
+        );
+      }
+    }
+
     await client.query(
       "UPDATE production_sessions SET status='FINISHED' WHERE id=$1",
       [session_id]

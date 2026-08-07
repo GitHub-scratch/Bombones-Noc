@@ -346,11 +346,17 @@ const ingredientes = prod.ingredients || [];
     const est2Recuperado = parseFloat(prod.est2_final_est) || 0;
 
     const chocolateBaseCargado = parseFloat(chocolateBaseIng?.quantity) || 0;
+    
     const chocolateCoberturaCargado = parseFloat(chocolateCoberturaIng?.quantity) || 0;
 
-    const mermaChocolateBase = Math.max(0, chocolateBaseCargado - est1Recuperado);
-    const mermaChocolateCobertura = Math.max(0, chocolateCoberturaCargado - est2Recuperado);
-
+    const totalPtKgReport = (parseFloat(prod.pt_quantity) || 0) * (prod.pt_unit === 'Granel' ? RECIPE.KG_PER_10KG : RECIPE.KG_PER_24POTES);
+    const usadoBaseReport = totalPtKgReport * RECIPE.BLANCO_FACTOR;
+    const usadoCoberturaReport = totalPtKgReport * RECIPE.COBERTURA_FACTOR;
+    const deberiaQuedarBase = Math.max(0, chocolateBaseCargado - usadoBaseReport);
+    const deberiaQuedarCobertura = Math.max(0, chocolateCoberturaCargado - usadoCoberturaReport);
+    const mermaChocolateBase = Math.max(0, deberiaQuedarBase - est1Recuperado);
+    const mermaChocolateCobertura = Math.max(0, deberiaQuedarCobertura - est2Recuperado);
+      
     const ingredientRows = ingredientes.map(ing => {
       const esChocolateBase = ing.material_name === chocolateBaseIng?.material_name && ing.lote === chocolateBaseIng?.lote;
       const esChocolateCobertura = ing.material_name === chocolateCoberturaIng?.material_name && ing.lote === chocolateCoberturaIng?.lote;

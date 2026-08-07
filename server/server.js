@@ -242,7 +242,10 @@ app.delete('/api/production/:id', async (req, res) => {
   try {
     await client.query('BEGIN');
     const prod = (await client.query('SELECT * FROM production WHERE id=$1',[req.params.id])).rows[0];
-    if (!prod) return res.status(404).json({ error: 'Produccion no encontrada' });
+if (!prod) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Produccion no encontrada' });
+    }
     const ings = (await client.query('SELECT * FROM production_ingredients WHERE production_id=$1',[req.params.id])).rows;
     for (const ing of ings) {
       await client.query('UPDATE batches SET quantity=quantity+$1 WHERE id=$2',[ing.quantity,ing.batch_id]);
@@ -325,8 +328,10 @@ app.post('/api/production/sessions/start', async (req, res) => {
 
     const { ingredients, description, product_name, format } = req.body;
 
-    if (!ingredients || !ingredients.length) {
+if (!ingredients || !ingredients.length) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Se requiere al menos una materia prima' });
+    }
     }
 
     for (const ing of ingredients) {
@@ -400,8 +405,10 @@ app.post('/api/production/sessions/refill', async (req, res) => {
 
     const { session_id, ingredients } = req.body;
 
-    if (!session_id || !ingredients || !ingredients.length) {
-      return res.status(400).json({ error: 'Datos incompletos' });
+if (!session_id || !ingredients || !ingredients.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Datos incompletos' });
+      }
     }
 
     const session = (
@@ -412,6 +419,7 @@ app.post('/api/production/sessions/refill', async (req, res) => {
     ).rows[0];
 
     if (!session) {
+        await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Sesion no encontrada' });
     }
 
@@ -502,6 +510,7 @@ app.post('/api/production/sessions/finish', async (req, res) => {
     ).rows[0];
 
     if (!session) {
+        await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Sesion no encontrada' });
     }
 

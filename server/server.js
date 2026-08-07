@@ -280,8 +280,8 @@ app.get('/api/pt_history', async (req, res) => {
 
 app.post('/api/pt_dispatch', async (req, res) => {
   try {
-    const { pt_name, pt_lote, quantity, unit, destination } = req.body;
-    const r = await pool.query('INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',[pt_name,pt_lote,quantity,unit,'OUT',destination||'GUARDA']);
+    const { pt_name, pt_lote, quantity, unit, destination, movement_code } = req.body;
+    const r = await pool.query('INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination,movement_code) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',[pt_name,pt_lote,quantity,unit,'OUT',destination||'GUARDA',movement_code||null]);
     res.json({ success: true, id: r.rows[0].id });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -494,9 +494,11 @@ app.post('/api/production/sessions/finish', async (req, res) => {
       est1_final_est,
       est2_final_est,
       kg_frambuesa_total,
-      recover_e1,
-      recover_e2
-    } = req.body;
+          recover_e1,
+          recover_e2,
+          frambuesa_movement_code,
+          storage_movement_code,
+            } = req.body;
 
     const valE1 = parseFloat(est1_final_est) || 0;
     const valE2 = parseFloat(est2_final_est) || 0;
@@ -567,14 +569,15 @@ app.post('/api/production/sessions/finish', async (req, res) => {
         );
 
         await client.query(
-          `INSERT INTO movements (material_id,batch_id,lote,type,quantity,description)
-           VALUES ($1,$2,$3,'PROD',$4,$5)`,
+                  `INSERT INTO movements (material_id,batch_id,lote,type,quantity,description,movement_code)
+                     VALUES ($1,$2,$3,'PROD',$4,$5,$6)`,
           [
             batch.material_id,
             row.batch_id,
             batch.lote,
             qty,
-            'Consumo Frambuesa Produccion: Sesion ' + session_id
+            'Consumo Frambuesa Produccion: Sesion ' + session_id,
+          frambuesa_movement_code || null
           ]
         );
 
@@ -588,8 +591,8 @@ app.post('/api/production/sessions/finish', async (req, res) => {
 
     const prod = await client.query(
       `INSERT INTO production
-       (pt_name,pt_lote,pt_quantity,pt_unit,crumble_waste,est1_final_est,est2_final_est,kg_frambuesa_total,frambuesa_lote)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                 (pt_name,pt_lote,pt_quantity,pt_unit,crumble_waste,est1_final_est,est2_final_est,kg_frambuesa_total,frambuesa_lote,frambuesa_movement_code,storage_movement_code)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING id`,
       [
         pt_name,
@@ -600,7 +603,9 @@ app.post('/api/production/sessions/finish', async (req, res) => {
         valE1,
         valE2,
         frambuesaFinal,
-        frambuesaLote
+        frambuesaLote,,
+        frambuesa_movement_code || null,
+        storage_movement_code || null
       ]
     );
 

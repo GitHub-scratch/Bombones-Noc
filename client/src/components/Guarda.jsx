@@ -46,7 +46,10 @@ export default function Guarda({ fetchData, showToast }) {
       unit: selectedBatch.unit,
       destination: form.destination.value || 'GUARDA',
       packaging: packagingType,
-      movement_code: form.movement_code?.value || null
+      movement_code: form.movement_code?.value || null,
+      reception_code: form.reception_code?.value || null,
+      operators_count: form.operators_count?.value ? parseInt(form.operators_count.value) : null,
+      tarja: form.tarja?.value || null
     };
 
     try {
@@ -119,7 +122,10 @@ export default function Guarda({ fetchData, showToast }) {
           ['Formato de Empaque', data.packaging],
           ['Bodega Destino', data.destination],
           ['Código de Guía Externa', data.movement_code || 'N/A'],
-          ['Estado', 'DESPACHADO']
+          ['Estado', 'DESPACHADO'],
+['Código de Recepción', data.reception_code || 'N/A'],
+['N° Operarios', data.operators_count || 'N/A'],
+['Tarja', data.tarja || 'N/A']
         ],
         theme: 'grid',
         headStyles: { fillColor: [230, 57, 70], textColor: [255, 255, 255], fontStyle: 'bold' }, // Raspberry

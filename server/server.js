@@ -24,6 +24,9 @@ pool.connect(err => { if (err) console.error('Error PostgreSQL:', err.message); 
     await pool.query(`ALTER TABLE production ADD COLUMN IF NOT EXISTS frambuesa_movement_code TEXT`);
     await pool.query(`ALTER TABLE production ADD COLUMN IF NOT EXISTS storage_movement_code TEXT`);
         await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS movement_code TEXT`);
+      await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS reception_code TEXT`);
+      await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS operators_count INTEGER`);
+      await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS tarja TEXT`);
         await pool.query(`ALTER TABLE movements ADD COLUMN IF NOT EXISTS movement_code TEXT`);
     console.log('Migracion de columnas de trazabilidad verificada correctamente');
   } catch (e) {
@@ -294,8 +297,8 @@ app.get('/api/pt_history', async (req, res) => {
 
 app.post('/api/pt_dispatch', async (req, res) => {
   try {
-    const { pt_name, pt_lote, quantity, unit, destination, movement_code } = req.body;
-    const r = await pool.query('INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination,movement_code) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',[pt_name,pt_lote,quantity,unit,'OUT',destination||'GUARDA',movement_code||null]);
+const { pt_name, pt_lote, quantity, unit, destination, movement_code, reception_code, operators_count, tarja } = req.body;
+      const r = await pool.query('INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination,movement_code,reception_code,operators_count,tarja) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',[pt_name,pt_lote,quantity,unit,'OUT',destination||'GUARDA',movement_code||null,reception_code||null,operators_count||null,tarja||null]);
     res.json({ success: true, id: r.rows[0].id });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

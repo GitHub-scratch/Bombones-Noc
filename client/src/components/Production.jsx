@@ -1063,8 +1063,7 @@ const ingredientes = prod.ingredients || [];
                         </td>
                         <td className="p-4">
                           <div className="flex justify-center gap-2">
-                            <button onClick={() => generateProductionReport(prod)} title="Reporte PDF" className="p-2 text-slate-300 hover:text-raspberry hover:bg-raspberry/5 rounded-lg transition-all"><FileText size={16}/></button>
-                            <button onClick={() => openPrintModal(prod)} className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"><Printer size={16} /></button>
+                                                                      <button onClick={() => openPrintModal(prod)} className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all" title="Imprimir Etiqueta"><Printer size={16} /></button>
                             <button onClick={() => deleteProduction(prod.id)} className="p-2 text-slate-300 hover:text-raspberry hover:bg-raspberry/5 rounded-lg transition-all"><Trash2 size={16} /></button>
                           </div>
                         </td>

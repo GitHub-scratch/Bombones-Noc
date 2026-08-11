@@ -406,7 +406,9 @@ const findProductionByLote = (pt_lote) => {
                         movement_code: h.movement_code,
                         reception_code: h.reception_code,
                         operators_count: h.operators_count,
-                        tarja: h.tarja
+                        tarja: h.tarja,
+              mp_dispatch_code: h.mp_dispatch_code,
+              production_date_override: h.production_date_override
                       })}
                       className="p-2 text-slate-300 dark:text-white/10 hover:text-chocolate dark:hover:text-cream hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-all"
                       title="Reimprimir Guía PDF"

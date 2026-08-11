@@ -21,6 +21,8 @@ export default function Guarda({ fetchData, showToast, productionHistory = [], m
   const [ptHistory, setPtHistory] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState('');
   const [selectedBatch, setSelectedBatch] = useState(null);
+  const [mpDispatchCode, setMpDispatchCode] = useState('');
+  const [productionDateOverride, setProductionDateOverride] = useState('');
 
   const loadData = async () => {
     try {
@@ -55,7 +57,9 @@ export default function Guarda({ fetchData, showToast, productionHistory = [], m
       movement_code: form.movement_code?.value || null,
       reception_code: form.reception_code?.value || null,
       operators_count: form.operators_count?.value ? parseInt(form.operators_count.value) : null,
-      tarja: form.tarja?.value || null
+      tarja: form.tarja?.value || null,
+      mp_dispatch_code: mpDispatchCode || null,
+      production_date_override: productionDateOverride || null
     };
     try {
       const response = await axios.post(`${API_URL}/pt_dispatch`, data);
@@ -64,6 +68,8 @@ export default function Guarda({ fetchData, showToast, productionHistory = [], m
       form.reset();
       setSelectedProduct('');
       setSelectedBatch(null);
+        setMpDispatchCode('');
+        setProductionDateOverride('');
       await loadData();
       await fetchData();
       showToast('Despacho a Guarda registrado con éxito');
@@ -85,8 +91,20 @@ export default function Guarda({ fetchData, showToast, productionHistory = [], m
   };
 
   // Busca la producción original (con sus insumos, mermas, etc.) que corresponde a un lote de PT
-  const findProductionByLote = (pt_lote) => {
-    return (productionHistory || []).find(p => p.pt_lote === pt_lote) || null;
+const findProductionByLote = (pt_lote) => {
+      const matches = (productionHistory || []).filter(p => p.pt_lote === pt_lote);
+      if (matches.length === 0) return null;
+      // Combina ingredientes y campos numéricos de TODAS las sesiones de producción
+      // que compartan el mismo pt_lote, para no perder materias primas si hubo más de una sesión.
+      const merged = { ...matches[0] };
+      merged.ingredients = matches.flatMap(m => m.ingredients || []);
+      ['est1_final_est', 'est2_final_est', 'crumble_waste', 'kg_frambuesa_total'].forEach(field => {
+        merged[field] = matches.reduce((sum, m) => sum + (parseFloat(m[field]) || 0), 0);
+      });
+      merged.frambuesa_movement_code = matches.map(m => m.frambuesa_movement_code).filter(Boolean).join(', ');
+      merged.frambuesa_lote = matches.map(m => m.frambuesa_lote).filter(Boolean).join(', ');
+      return merged;
+    };
   };
 
   // Genera el PDF con el formato oficial de Producción (usado antes al finalizar jornada),
@@ -95,7 +113,7 @@ export default function Guarda({ fetchData, showToast, productionHistory = [], m
     try {
       const prod = findProductionByLote(dispatchData.pt_lote) || {};
       const doc = new jsPDF();
-      const dateStr = new Date(prod.date || Date.now()).toLocaleDateString();
+      const dateStr = new Date(dispatchData.production_date_override || prod.date || Date.now()).toLocaleDateString();
 
       // --- ENCABEZADO ---
       doc.setDrawColor(0);
@@ -124,7 +142,7 @@ export default function Guarda({ fetchData, showToast, productionHistory = [], m
           ],
           [
             { content: `Lote: ${dispatchData.pt_lote}`, colSpan: 1 },
-            { content: `Cód. Desp. Interno MP. Frunar: ${prod.frambuesa_movement_code || ''}`, colSpan: 1 },
+            { content: `Cód. Desp. Interno MP. Frunar: ${dispatchData.mp_dispatch_code || ''}`, colSpan: 1 },
             { content: `Código Recep PT. Frunar: ${dispatchData.reception_code || ''}`, colSpan: 2 }
           ],
           [
@@ -327,6 +345,16 @@ export default function Guarda({ fetchData, showToast, productionHistory = [], m
           <label className="text-[9px] font-black uppercase text-slate-400 ml-2">N° de Operarios</label>
           <input name="operators_count" type="number" placeholder="Ej: 2" className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2" />
         </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Cód. Desp. Interno MP. Frunar</label>
+            <input value={mpDispatchCode} onChange={(e) => setMpDispatchCode(e.target.value)} placeholder="Ej: DESP-00123" className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors" />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Fecha de Producción (opcional)</label>
+            <input value={productionDateOverride} onChange={(e) => setProductionDateOverride(e.target.value)} type="date" className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors" />
+          </div>
 
         <div className="space-y-1">
           <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Tarja</label>

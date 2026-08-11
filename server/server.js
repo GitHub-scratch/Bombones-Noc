@@ -25,6 +25,9 @@ pool.connect(err => { if (err) console.error('Error PostgreSQL:', err.message); 
     await pool.query(`ALTER TABLE production ADD COLUMN IF NOT EXISTS storage_movement_code TEXT`);
         await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS movement_code TEXT`);
       await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS reception_code TEXT`);
+      await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS mp_dispatch_code TEXT`);
+  await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS production_date_override TIMESTAMP`);
+    
       await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS operators_count INTEGER`);
       await pool.query(`ALTER TABLE pt_movements ADD COLUMN IF NOT EXISTS tarja TEXT`);
         await pool.query(`ALTER TABLE movements ADD COLUMN IF NOT EXISTS movement_code TEXT`);
@@ -297,9 +300,9 @@ app.get('/api/pt_history', async (req, res) => {
 
 app.post('/api/pt_dispatch', async (req, res) => {
   try {
-const { pt_name, pt_lote, quantity, unit, destination, movement_code, reception_code, operators_count, tarja } = req.body;
-      const r = await pool.query('INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination,movement_code,reception_code,operators_count,tarja) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',[pt_name,pt_lote,quantity,unit,'OUT',destination||'GUARDA',movement_code||null,reception_code||null,operators_count||null,tarja||null]);
-    res.json({ success: true, id: r.rows[0].id });
+const { pt_name, pt_lote, quantity, unit, destination, movement_code, reception_code, operators_count, tarja, mp_dispatch_code, production_date_override } = req.body;
+      const r = await pool.query('INSERT INTO pt_movements (pt_name,pt_lote,quantity,unit,type,destination,movement_code,reception_code,operators_count,tarja,mp_dispatch_code,production_date_override) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id',[pt_name,pt_lote,quantity,unit,'OUT',destination||'GUARDA',movement_code||null,reception_code||null,operators_count||null,tarja||null,mp_dispatch_code||null,production_date_override||null]);
+      res.json({ success: true, id: r.rows[0].id });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

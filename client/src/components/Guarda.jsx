@@ -3,10 +3,20 @@ import axios from 'axios';
 import { ArrowUpRight, ClipboardList, Trash2, Info, FileText } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import logoFrunar from '../Frunar.jpeg';
+import firmaOmar from '../Firma Omar.png';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
-export default function Guarda({ fetchData, showToast }) {
+const RECIPE = {
+  BLANCO_FACTOR: 0.29,
+  COBERTURA_FACTOR: 0.28,
+  FRAMBUESA_FACTOR: 0.43,
+  KG_PER_24POTES: 3.6,
+  KG_PER_10KG: 10
+};
+
+export default function Guarda({ fetchData, showToast, productionHistory = [], materials = [] }) {
   const [ptBatches, setPtBatches] = useState([]);
   const [ptHistory, setPtHistory] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState('');
@@ -74,62 +84,169 @@ export default function Guarda({ fetchData, showToast }) {
     }
   };
 
-  const generateDispatchPDF = (data) => {
+  // Busca la producción original (con sus insumos, mermas, etc.) que corresponde a un lote de PT
+  const findProductionByLote = (pt_lote) => {
+    return (productionHistory || []).find(p => p.pt_lote === pt_lote) || null;
+  };
+
+  // Genera el PDF con el formato oficial de Producción (usado antes al finalizar jornada),
+  // combinando los datos de producción original con los datos del despacho a Guarda.
+  const generateDispatchPDF = (dispatchData) => {
     try {
+      const prod = findProductionByLote(dispatchData.pt_lote) || {};
       const doc = new jsPDF();
-      const dateStr = new Date().toLocaleString();
-      const guideNumber = `G-${String(data.id || '---').padStart(5, '0')}`;
-      doc.setFillColor(61, 37, 20);
-      doc.rect(0, 0, 210, 40, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(22);
-      doc.setFont('helvetica', 'bold');
-      doc.text('BOMBONES NOC', 15, 20);
+      const dateStr = new Date(prod.date || Date.now()).toLocaleDateString();
+
+      // --- ENCABEZADO ---
+      doc.setDrawColor(0);
+      doc.setLineWidth(0.1);
+      doc.rect(10, 10, 190, 25);
+      doc.addImage(logoFrunar, 'JPEG', 12, 12, 45, 21);
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text('GUÍA DE DESPACHO INTERNO - GUARDA', 15, 28);
-      doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text(`N° GUÍA: ${guideNumber}`, 140, 20);
-      doc.setFontSize(9);
+      doc.text('PRODUCCIÓN PRODUCTO TERMINADO', 105, 22, { align: 'center' });
+      doc.text('Sistema De Gestión De Calidad', 105, 17, { align: 'center' });
+      doc.setFontSize(7);
       doc.setFont('helvetica', 'normal');
-      doc.text(`Fecha: ${dateStr}`, 140, 28);
-      let currentY = 55;
+      doc.text('Códigos.: R-BRCGS-6.1', 155, 17);
+      doc.text('Fecha : 10-2025', 155, 22);
+      doc.text('Versión: 02', 155, 27);
+
+      let currentY = 40;
+
+      // --- TABLA DE DATOS GENERALES (con datos de producción + despacho a Guarda) ---
       autoTable(doc, {
         startY: currentY,
-        head: [['Concepto', 'Detalle']],
         body: [
-          ['Producto', data.pt_name],
-          ['Lote de Producción', data.pt_lote],
-          ['Cantidad Despachada', `${data.quantity} ${data.unit}`],
-          ['Formato de Empaque', data.packaging],
-          ['Bodega Destino', data.destination],
-          ['Código de Guía Externa', data.movement_code || 'N/A'],
-          ['Estado', 'DESPACHADO'],
-          ['Código de Recepción', data.reception_code || 'N/A'],
-          ['N° Operarios', data.operators_count || 'N/A'],
-          ['Tarja', data.tarja || 'N/A']
+          [
+            { content: `Producto: ${dispatchData.pt_name}`, colSpan: 2 },
+            { content: `Fecha de Producción: ${dateStr}`, colSpan: 2 }
+          ],
+          [
+            { content: `Lote: ${dispatchData.pt_lote}`, colSpan: 1 },
+            { content: `Cód. Desp. Interno MP. Frunar: ${prod.frambuesa_movement_code || ''}`, colSpan: 1 },
+            { content: `Código Recep PT. Frunar: ${dispatchData.reception_code || ''}`, colSpan: 2 }
+          ],
+          [
+            { content: `Tarja: ${dispatchData.tarja || ''}`, colSpan: 1 },
+            { content: `Nombre del responsable de Calidad: Valeria Briones`, colSpan: 3 }
+          ],
+          [
+            { content: `Operarios: ${dispatchData.operators_count || ''}`, colSpan: 2 },
+            { content: `Código de Guía: ${dispatchData.movement_code || 'N/A'}`, colSpan: 1 },
+            { content: `Bodega Destino: ${dispatchData.destination || 'GUARDA'}`, colSpan: 1 }
+          ]
         ],
         theme: 'grid',
-        headStyles: { fillColor: [230, 57, 70], textColor: [255, 255, 255], fontStyle: 'bold' },
-        styles: { fontSize: 11, cellPadding: 8 },
-        columnStyles: { 0: { fontStyle: 'bold', width: 60 } }
+        styles: { fontSize: 8, cellPadding: 2, textColor: [0, 0, 0] },
+        columnStyles: { 0: { width: 47.5 }, 1: { width: 47.5 }, 2: { width: 47.5 }, 3: { width: 47.5 } }
       });
-      currentY = doc.lastAutoTable.finalY + 40;
-      doc.setDrawColor(61, 37, 20);
-      doc.setLineWidth(0.5);
-      doc.line(30, currentY, 90, currentY);
+
+      currentY = doc.lastAutoTable.finalY + 10;
+
+      // --- TABLA DE INGREDIENTES (tomados de la producción original, si existe) ---
       doc.setFontSize(9);
-      doc.setTextColor(61, 37, 20);
-      doc.text('Firma Despacha', 60, currentY + 5, { align: 'center' });
-      doc.text('Responsable Producción', 60, currentY + 10, { align: 'center' });
-      doc.line(120, currentY, 180, currentY);
-      doc.text('Firma Recibe', 150, currentY + 5, { align: 'center' });
-      doc.text('Responsable Bodega', 150, currentY + 10, { align: 'center' });
+      doc.setFont('helvetica', 'bold');
+      doc.text('Resumen del Producto Terminado', 105, currentY - 2, { align: 'center' });
+
+      const ingredientes = prod.ingredients || [];
+      const frambuesaIng = ingredientes.find(ing => {
+        const name = (ing.material_name || '').toLowerCase();
+        return name.includes('frambuesa') || name.includes('raspberry');
+      });
+      const loteFrambuesa = prod.frambuesa_lote || frambuesaIng?.lote || 'S/L';
+      const chocolateBaseIng = ingredientes.find(ing => {
+        const name = (ing.material_name || '').toLowerCase();
+        return name.includes('blanco') || name.includes('white');
+      });
+      const chocolateCoberturaIng = ingredientes.find(ing => {
+        const name = (ing.material_name || '').toLowerCase();
+        return (name.includes('leche') || name.includes('milk') || name.includes('amargo') || name.includes('dark') || name.includes('rub') || name.includes('cobertura'));
+      });
+
+      const est1Recuperado = parseFloat(prod.est1_final_est) || 0;
+      const est2Recuperado = parseFloat(prod.est2_final_est) || 0;
+      const chocolateBaseCargado = parseFloat(chocolateBaseIng?.quantity) || 0;
+      const chocolateCoberturaCargado = parseFloat(chocolateCoberturaIng?.quantity) || 0;
+      const totalPtKgReport = (parseFloat(dispatchData.quantity) || 0) * (dispatchData.unit === 'Granel' ? RECIPE.KG_PER_10KG : RECIPE.KG_PER_24POTES);
+      const usadoBaseReport = totalPtKgReport * RECIPE.BLANCO_FACTOR;
+      const usadoCoberturaReport = totalPtKgReport * RECIPE.COBERTURA_FACTOR;
+      const deberiaQuedarBase = Math.max(0, chocolateBaseCargado - usadoBaseReport);
+      const deberiaQuedarCobertura = Math.max(0, chocolateCoberturaCargado - usadoCoberturaReport);
+      const mermaChocolateBase = Math.max(0, deberiaQuedarBase - est1Recuperado);
+      const mermaChocolateCobertura = Math.max(0, deberiaQuedarCobertura - est2Recuperado);
+
+      const ingredientRows = ingredientes.map(ing => {
+        const esChocolateBase = ing.material_name === chocolateBaseIng?.material_name && ing.lote === chocolateBaseIng?.lote;
+        const esChocolateCobertura = ing.material_name === chocolateCoberturaIng?.material_name && ing.lote === chocolateCoberturaIng?.lote;
+        let salidaProceso = '';
+        let merma = '';
+        if (esChocolateBase) {
+          salidaProceso = `${est1Recuperado.toFixed(2)} kg`;
+          merma = `${mermaChocolateBase.toFixed(2)} kg`;
+        }
+        if (esChocolateCobertura) {
+          salidaProceso = `${est2Recuperado.toFixed(2)} kg`;
+          merma = `${mermaChocolateCobertura.toFixed(2)} kg`;
+        }
+        return [ing.material_name, ing.lote, `${(parseFloat(ing.quantity) || 0).toFixed(2)} kg`, salidaProceso, merma];
+      });
+
+      if (prod.crumble_waste > 0) {
+        ingredientRows.push(['Merma Crumble', loteFrambuesa, '', '', `${prod.crumble_waste} kg`]);
+      }
+      if (prod.kg_frambuesa_total > 0) {
+        ingredientRows.push(['Frambuesa Utilizada', loteFrambuesa, `${prod.kg_frambuesa_total} kg`, '', '']);
+      }
+
+      const totalPotes = dispatchData.unit === 'Cajas' ? (parseFloat(dispatchData.quantity) * 24) : '';
+      ingredientRows.push(['Total, potes', '', totalPotes, '', '']);
+      ingredientRows.push(['Total, bolsas', '', '', '', '']);
+      ingredientRows.push(['Total, cajas', '', dispatchData.quantity, '', '']);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Materias Primas', 'Lote/Origen', 'Entrada a proceso kg', 'Salida de proceso kg', 'Mermas']],
+        body: ingredientRows,
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1 },
+        styles: { fontSize: 8, cellPadding: 2, lineWidth: 0.1 },
+        columnStyles: { 0: { width: 50 }, 1: { width: 40 }, 2: { width: 35 }, 3: { width: 35 }, 4: { width: 30 } }
+      });
+
+      currentY = doc.lastAutoTable.finalY + 10;
+
+      // --- OBSERVACIONES ---
+      doc.rect(10, currentY, 190, 25);
       doc.setFontSize(8);
-      doc.setTextColor(150);
-      doc.text(`Guía de Control Interno N° ${guideNumber} - Documento no válido para traslado externo.`, 105, 285, { align: 'center' });
-      doc.save(`Guia_Despacho_${guideNumber}_${data.pt_lote}.pdf`);
+
+      // --- CODIGOS DE GUIA EXTERNA ---
+      if (dispatchData.movement_code || prod.storage_movement_code) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        if (dispatchData.movement_code) {
+          doc.text(`Código Guía Envío a Guarda: ${dispatchData.movement_code}`, 12, currentY);
+          currentY += 5;
+        }
+        if (dispatchData.reception_code) {
+          doc.text(`Código de Recepción: ${dispatchData.reception_code}`, 12, currentY);
+          currentY += 5;
+        }
+        currentY += 3;
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Observaciones:', 12, currentY + 5);
+      currentY += 45;
+
+      // --- FIRMA ---
+      doc.addImage(firmaOmar, 'PNG', 82.5, currentY - 22, 45, 20);
+      doc.line(75, currentY, 135, currentY);
+      doc.setFontSize(9);
+      doc.text('Firma Responsable', 105, currentY + 5, { align: 'center' });
+
+      doc.save(`Reporte_Despacho_${dispatchData.pt_lote}.pdf`);
+      showToast('Reporte PDF generado');
     } catch (error) {
       console.error('Error al generar PDF:', error);
       showToast('Error al generar PDF de despacho', 'error');
@@ -139,199 +256,148 @@ export default function Guarda({ fetchData, showToast }) {
   const dispatchHistory = ptHistory.filter(h => h.type === 'OUT');
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
-      <header>
-        <h2 className="text-3xl font-black text-chocolate dark:text-cream uppercase tracking-tighter">Despacho a <span className="text-raspberry">Guarda</span></h2>
-        <p className="text-slate-400 dark:text-white/40 font-bold uppercase text-[9px] tracking-[0.3em] mt-1 ml-1">Salida de producto terminado a bodega externa.</p>
-      </header>
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <div className="xl:col-span-1">
-          <form onSubmit={handleDispatch} className="bg-white dark:bg-[#231512] p-6 rounded-[2rem] shadow-xl border border-chocolate/5 dark:border-white/5 space-y-4 sticky top-8 transition-colors duration-500">
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 dark:text-white/40 uppercase tracking-widest ml-2">Producto</label>
-                <select
-                  className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors"
-                  value={selectedProduct}
-                  onChange={(e) => {
-                    setSelectedProduct(e.target.value);
-                    setSelectedBatch(null);
-                  }}
-                  required
-                >
-                  <option value="">Seleccionar Producto...</option>
-                  {uniqueProducts.map((name, idx) => (
-                    <option key={idx} value={name}>{name}</option>
-                  ))}
-                </select>
-              </div>
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-2xl font-black text-chocolate dark:text-cream tracking-tight">Despacho a Guarda</h2>
+        <p className="text-xs font-bold text-slate-400">Salida de producto terminado a bodega externa.</p>
+      </div>
 
-              {selectedProduct && (
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 dark:text-white/40 uppercase tracking-widest ml-2">Lote Disponible</label>
-                  <select
-                    className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors"
-                    onChange={(e) => setSelectedBatch(ptBatches.find(b => b.pt_lote === e.target.value && b.pt_name === selectedProduct))}
-                    required
-                  >
-                    <option value="">Seleccionar Lote...</option>
-                    {ptBatches.filter(b => b.pt_name === selectedProduct).map((b, idx) => (
-                      <option key={idx} value={b.pt_lote}>
-                        {b.pt_lote} ({b.total_quantity} {b.unit})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {selectedBatch && (
-                <div className="p-3 bg-chocolate/5 dark:bg-white/5 rounded-xl border border-chocolate/10 dark:border-white/10 flex items-center gap-3">
-                  <Info className="text-chocolate dark:text-cream/60" size={16} />
-                  <div>
-                    <p className="text-[8px] font-black uppercase text-chocolate/40 dark:text-white/30 tracking-widest">Formato</p>
-                    <p className="text-xs font-black text-chocolate dark:text-cream">
-                      {selectedBatch.unit === 'Cajas' ? 'Cajas de Potes (24 un)' : 'Cajas de Granel'}
-                    </p>
-                  </div>
-                </div>
-              )}
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 dark:text-white/40 uppercase tracking-widest ml-2">Cantidad a Despachar</label>
-                <div className="flex gap-2">
-                  <input
-                    name="quantity"
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    className="flex-1 p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors"
-                    required
-                  />
-                  <div className="w-16 flex items-center justify-center bg-slate-100 dark:bg-white/5 rounded-xl font-black text-slate-400 dark:text-white/20 text-[10px] uppercase">
-                    {selectedBatch?.unit || '---'}
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 dark:text-white/40 uppercase tracking-widest ml-2">Bodega Destino</label>
-                <input
-                  name="destination"
-                  placeholder="Ej: Bodega Central"
-                  className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 dark:text-white/40 uppercase tracking-widest ml-2">Código de Guía (Bodega Externa)</label>
-              <input
-                name="movement_code"
-                placeholder="Ej: GUIA-00123"
-                className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 dark:text-white/40 uppercase tracking-widest ml-2">Código de Recepción</label>
-              <input
-                name="reception_code"
-                placeholder="Ej: REC-00123"
-                className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 dark:text-white/40 uppercase tracking-widest ml-2">N° de Operarios</label>
-              <input
-                name="operators_count"
-                type="number"
-                placeholder="Ej: 2"
-                className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 dark:text-white/40 uppercase tracking-widest ml-2">Tarja</label>
-              <input
-                name="tarja"
-                placeholder="Ej: T-00123"
-                className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={!selectedBatch}
-              className="w-full bg-raspberry text-white p-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] shadow-xl shadow-raspberry/20 hover:scale-[1.01] disabled:opacity-50 disabled:scale-100 transition-all flex items-center justify-center gap-2"
-            >
-              <ArrowUpRight size={18} /> DESPACHAR A GUARDA
-            </button>
-          </form>
+      <form onSubmit={handleDispatch} className="bg-white dark:bg-white/5 p-6 rounded-[2rem] shadow-sm space-y-4">
+        <div className="space-y-1">
+          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Producto</label>
+          <select
+            className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors"
+            value={selectedProduct}
+            onChange={(e) => { setSelectedProduct(e.target.value); setSelectedBatch(null); }}
+            required
+          >
+            <option value="">Seleccionar Producto...</option>
+            {uniqueProducts.map((name, idx) => (
+              <option key={idx} value={name}>{name}</option>
+            ))}
+          </select>
         </div>
 
-        <div className="xl:col-span-2 space-y-4">
-          <h3 className="text-lg font-black text-chocolate dark:text-cream flex items-center gap-2">
-            <ClipboardList size={18} className="text-raspberry" /> Historial de Despachos
-          </h3>
-          <div className="bg-white dark:bg-[#231512] rounded-[2rem] shadow-xl border border-chocolate/5 dark:border-white/5 overflow-hidden transition-colors duration-500">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/50 dark:bg-white/5">
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest">N° Guía</th>
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest">Fecha</th>
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest">Producto</th>
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest">Lote</th>
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest text-center">Destino</th>
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest text-right">Cant.</th>
-                  <th className="p-4 text-[9px] font-black uppercase text-slate-400 dark:text-white/40 tracking-widest text-center">Acc.</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 dark:divide-white/5">
-                {dispatchHistory.length === 0 && (
-                  <tr><td colSpan="7" className="p-8 text-center text-slate-400 dark:text-white/20 font-bold italic text-xs">No hay despachos registrados.</td></tr>
-                )}
-                {dispatchHistory.map((h) => (
-                  <tr key={h.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
-                    <td className="p-4">
-                      <span className="text-[10px] font-black text-raspberry bg-raspberry/5 dark:bg-raspberry/10 px-2 py-1 rounded-md">
-                        G-{String(h.id).padStart(5, '0')}
-                      </span>
-                    </td>
-                    <td className="p-4 text-[10px] font-bold text-slate-400 dark:text-white/30">{new Date(h.date).toLocaleDateString()}</td>
-                    <td className="p-4 text-xs font-black text-chocolate dark:text-cream/90 uppercase">{h.pt_name}</td>
-                    <td className="p-4 text-[10px] font-bold text-slate-500 dark:text-white/40">{h.pt_lote}</td>
-                    <td className="p-4 text-center">
-                      <span className="bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 px-2 py-0.5 rounded-full text-[8px] font-black uppercase">
-                        {h.destination || 'GUARDA'}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right font-black text-orange-600 dark:text-orange-400 text-xs">
-                      -{h.quantity} <span className="text-[9px] opacity-50">{h.unit}</span>
-                    </td>
-                    <td className="p-4 text-center flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => generateDispatchPDF({
-                          id: h.id,
-                          pt_name: h.pt_name,
-                          pt_lote: h.pt_lote,
-                          quantity: h.quantity,
-                          unit: h.unit,
-                          destination: h.destination,
-                          packaging: h.unit === 'Cajas' ? 'Cajas de Potes (24 un)' : 'Cajas de Granel',
-                          movement_code: h.movement_code,
-                          reception_code: h.reception_code,
-                          operators_count: h.operators_count,
-                          tarja: h.tarja
-                        })}
-                        className="p-2 text-slate-300 dark:text-white/10 hover:text-chocolate dark:hover:text-cream hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-all"
-                        title="Reimprimir Guía PDF"
-                      >
-                        <FileText size={14}/>
-                      </button>
-                      <button onClick={() => deleteDispatch(h.id)} className="p-2 text-slate-300 dark:text-white/10 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all">
-                        <Trash2 size={14}/>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {selectedProduct && (
+          <div className="space-y-1">
+            <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Lote Disponible</label>
+            <select
+              className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors"
+              onChange={(e) => setSelectedBatch(ptBatches.find(b => b.pt_lote === e.target.value && b.pt_name === selectedProduct))}
+              required
+            >
+              <option value="">Seleccionar Lote...</option>
+              {ptBatches.filter(b => b.pt_name === selectedProduct).map((b, idx) => (
+                <option key={idx} value={b.pt_lote}>{b.pt_lote} ({b.total_quantity} {b.unit})</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {selectedBatch && (
+          <div className="text-xs font-bold text-slate-400">
+            Formato: {selectedBatch.unit === 'Cajas' ? 'Cajas de Potes (24 un)' : 'Cajas de Granel'}
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Cantidad a Despachar</label>
+          <div className="flex gap-2">
+            <input name="quantity" type="number" step="0.01" placeholder="0.00" className="flex-1 p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors" required />
+            <span className="p-3 text-xs font-black text-slate-400">{selectedBatch?.unit || '---'}</span>
           </div>
         </div>
+
+        <div className="space-y-1">
+          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Bodega Destino</label>
+          <input name="destination" placeholder="Ej: Bodega Central" className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2 focus:ring-chocolate/20 transition-colors" />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Código de Guía (Bodega Externa)</label>
+          <input name="movement_code" placeholder="Ej: GUIA-00123" className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2" />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Código de Recepción</label>
+          <input name="reception_code" placeholder="Ej: REC-00123" className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2" />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">N° de Operarios</label>
+          <input name="operators_count" type="number" placeholder="Ej: 2" className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2" />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Tarja</label>
+          <input name="tarja" placeholder="Ej: T-00123" className="w-full p-3 bg-slate-50 dark:bg-black/20 rounded-xl border-none font-bold text-chocolate dark:text-cream text-xs focus:ring-2" />
+        </div>
+
+        <button type="submit" className="w-full bg-raspberry text-white p-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2">
+          <ArrowUpRight size={18} /> Despachar a Guarda
+        </button>
+      </form>
+
+      <div className="bg-white dark:bg-white/5 p-6 rounded-[2rem] shadow-sm">
+        <h3 className="text-sm font-black text-chocolate dark:text-cream uppercase tracking-widest mb-4">Historial de Despachos</h3>
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-slate-50/50 dark:bg-white/5">
+              <th className="p-3 text-[9px] font-black uppercase text-slate-400 tracking-widest">N° Guía</th>
+              <th className="p-3 text-[9px] font-black uppercase text-slate-400 tracking-widest">Fecha</th>
+              <th className="p-3 text-[9px] font-black uppercase text-slate-400 tracking-widest">Producto</th>
+              <th className="p-3 text-[9px] font-black uppercase text-slate-400 tracking-widest">Lote</th>
+              <th className="p-3 text-[9px] font-black uppercase text-slate-400 tracking-widest">Destino</th>
+              <th className="p-3 text-[9px] font-black uppercase text-slate-400 tracking-widest text-right">Cant.</th>
+              <th className="p-3 text-[9px] font-black uppercase text-slate-400 tracking-widest text-center">Acc.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dispatchHistory.length === 0 && (
+              <tr><td colSpan={7} className="p-4 text-center text-xs font-bold text-slate-300">No hay despachos registrados.</td></tr>
+            )}
+            {dispatchHistory.map((h) => (
+              <tr key={h.id} className="border-t border-slate-100 dark:border-white/5">
+                <td className="p-3 text-xs font-bold text-chocolate dark:text-cream">G-{String(h.id).padStart(5, '0')}</td>
+                <td className="p-3 text-xs font-bold text-slate-400">{new Date(h.date).toLocaleDateString()}</td>
+                <td className="p-3 text-xs font-bold text-chocolate dark:text-cream">{h.pt_name}</td>
+                <td className="p-3 text-xs font-bold text-slate-400">{h.pt_lote}</td>
+                <td className="p-3 text-xs font-bold text-slate-400">{h.destination || 'GUARDA'}</td>
+                <td className="p-3 text-xs font-black text-raspberry text-right">-{h.quantity} {h.unit}</td>
+                <td className="p-3 text-center">
+                  <div className="flex justify-center gap-2">
+                    <button
+                      onClick={() => generateDispatchPDF({
+                        id: h.id,
+                        pt_name: h.pt_name,
+                        pt_lote: h.pt_lote,
+                        quantity: h.quantity,
+                        unit: h.unit,
+                        destination: h.destination,
+                        packaging: h.unit === 'Cajas' ? 'Cajas de Potes (24 un)' : 'Cajas de Granel',
+                        movement_code: h.movement_code,
+                        reception_code: h.reception_code,
+                        operators_count: h.operators_count,
+                        tarja: h.tarja
+                      })}
+                      className="p-2 text-slate-300 dark:text-white/10 hover:text-chocolate dark:hover:text-cream hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-all"
+                      title="Reimprimir Guía PDF"
+                    >
+                      <FileText size={16} />
+                    </button>
+                    <button
+                      onClick={() => deleteDispatch(h.id)}
+                      className="p-2 text-slate-300 dark:text-white/10 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all"
+                      title="Anular Despacho"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

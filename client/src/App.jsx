@@ -198,7 +198,7 @@ export default function App() {
               <Production materials={materials} stock={stock} productionHistory={productionHistory} activeSessions={activeSessions} fetchData={fetchData} showToast={showToast} />
             )}
             {activeTab === 'guarda' && (
-              <Guarda fetchData={fetchData} showToast={showToast} />
+              <Guarda fetchData={fetchData} showToast={showToast}  productionHistory={productionHistory} materials={materials}/>
             )}
             {activeTab === 'history' && (
               <History

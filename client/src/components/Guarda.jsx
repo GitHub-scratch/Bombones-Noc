@@ -105,8 +105,7 @@ const findProductionByLote = (pt_lote) => {
       merged.frambuesa_lote = matches.map(m => m.frambuesa_lote).filter(Boolean).join(', ');
       return merged;
     };
-  };
-
+  
   // Genera el PDF con el formato oficial de Producción (usado antes al finalizar jornada),
   // combinando los datos de producción original con los datos del despacho a Guarda.
   const generateDispatchPDF = (dispatchData) => {

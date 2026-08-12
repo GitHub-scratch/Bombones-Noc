@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import Simulator from './Simulator';
 import { Plus, Trash2, ChevronDown, ChevronUp, PackageOpen, History, Printer, X, Loader2, RefreshCw, PlusCircle, Database, Play, TrendingUp } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';

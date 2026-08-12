@@ -39,7 +39,7 @@ export default function Simulator({ materials, stock, showToast, hideHeader = fa
     simulate();
   }, [targetQuantity, simulationType, stock, materials, coberturaType]);
 
-  const simulate = () => {
+    function simulate() {
     const totalKgNeeded = simulationType === 'box' ? targetQuantity * KG_PER_BOX : targetQuantity;
     
     const calculation = Object.entries(RECIPE).map(([name, factor]) => {
@@ -73,7 +73,7 @@ export default function Simulator({ materials, stock, showToast, hideHeader = fa
       maxPossible: Math.floor(maxPossible),
       totalKgNeeded
     });
-  };
+    }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">

@@ -344,7 +344,7 @@ const [searchTerm, setSearchTerm] = useState('');
     }
   };
 
-  const filteredHistory = productionHistory.filter(p => (p.pt_name?.toLowerCase().includes(searchTerm.toLowerCase()) || p.pt_lote?.toLowerCase().includes(searchTerm.toLowerCase())) && (!dateFilter || p.date.startsWith(dateFilter)));
+    const filteredHistory = productionHistory.filter(p => (p.pt_name?.toLowerCase().includes(searchTerm.toLowerCase()) || p.pt_lote?.toLowerCase().includes(searchTerm.toLowerCase())) && (!dateFilter || (p.date && p.date.startsWith(dateFilter))));
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
